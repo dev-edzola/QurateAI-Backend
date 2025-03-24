@@ -1260,6 +1260,160 @@ def get_default_form_fields():
         }
     ]
 
+@app.route('/chat', methods=['POST', 'OPTIONS'])
+def chat_api():
+    global conversation_state
+    
+    # Handle CORS preflight request
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response
+
+    # Initialize LLM
+    llm = select_llm(choice='open_ai', model_name="gpt-4o-mini")
+    
+    # Parse incoming request
+    data = request.get_json()
+    user_id = data.get("user_id")
+    answer = data.get("answer")
+    field_id = data.get("field_id")
+
+    # Initialize conversation state if not exists
+    if user_id not in conversation_state:
+        conversation_state[user_id] = {
+            "form_fields": None,
+            "collected_answers": {},
+            "field_parsed_answers": {"language": None},
+            "field_asked_counter": {"language": 0, "fields": 0},
+            "language": "en-IN",
+            "start_conversation": True,
+            "last_question": "",
+            "step": "ask_language"
+        }
+
+    state = conversation_state[user_id]
+
+    # Handle the user's answer based on the current step
+    if answer and field_id:
+        state["collected_answers"][state["last_question"]] = answer
+        state["field_asked_counter"][field_id] += 1
+
+        if state["step"] == "ask_language":
+            state["field_parsed_answers"] = parse_for_answers(
+                collected_answers=state["collected_answers"],
+                form_fields=[{"field_id": "language", "field_name": "Language", "datatype": "string", "additional_info": "Preferred language"}],
+                llm=llm
+            )
+            if state["field_parsed_answers"].get("language"):
+                lang = state["field_parsed_answers"]["language"]
+                state["language"] = f"{lang.lower()}-IN" if len(lang) == 2 and lang.lower() in ["en", "hi", "bn", "kn", "ml", "mr", "od", "pa", "ta", "te", "gu"] else (lang if lang.endswith("-IN") else "en-IN")
+            state["step"] = "ask_fields"
+
+        elif state["step"] == "ask_fields":
+            state["form_fields"] = parse_for_form_fields(user_query=answer, llm=llm).get("fields", [])
+            if not any(field["field_id"] == "language" for field in state["form_fields"]):
+                state["form_fields"].insert(0, {
+                    "field_id": "language",
+                    "field_name": "Language",
+                    "datatype": "string",
+                    "additional_info": "This question is asked so that further communication can happen in that language"
+                })
+            state["field_parsed_answers"] = {field["field_id"]: None for field in state["form_fields"]}
+            state["field_parsed_answers"]["language"] = state["collected_answers"].get(state["last_question"])
+            state["field_asked_counter"] = {field["field_id"]: 0 for field in state["form_fields"]}
+            state["step"] = "collect_data"
+
+        elif state["step"] == "collect_data":
+            state["field_parsed_answers"] = parse_for_answers(
+                collected_answers=state["collected_answers"],
+                form_fields=state["form_fields"],
+                llm=llm
+            )
+
+    # Determine the next question based on the current step
+    if state["step"] == "ask_language":
+        greeting = "Hello, I am Qurate, your personal telecaller assistant. " if state["start_conversation"] else ""
+        natural_question = greeting + "What language would you prefer to use for our conversation?"
+        next_field_id = "language"
+
+    elif state["step"] == "ask_fields":
+        language_prompt = state["language"] if state["language"] != "en-IN" else "English"
+        question_prompt = f"Please tell me what information you'd like me to collect in {language_prompt}. For example, you can say 'name, phone, age' or anything else you want."
+        messages = [
+            SystemMessage(content="You are a conversational human that frames questions naturally."),
+            HumanMessage(content=question_prompt)
+        ]
+        natural_question = llm.invoke(messages).content.strip()
+        next_field_id = "fields"
+
+    elif state["step"] == "collect_data":
+        pending_fields = [
+            field for field in state["form_fields"]
+            if state["field_asked_counter"].get(field["field_id"], 0) < 3
+            and (state["field_parsed_answers"].get(field["field_id"]) is None or state["field_parsed_answers"].get(field["field_id"]) == "")
+        ]
+
+        if not pending_fields:
+            response_data = {
+                "message": "Thank you for providing all the details! Here's what we collected:",
+                "field_id": None,
+                "collected_answers": state["field_parsed_answers"]
+            }
+            del conversation_state[user_id]
+            response = jsonify(response_data)
+            response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
+            return response
+
+        next_field = pending_fields[0]
+        language = state["language"]
+        last_10_conversations = list(state["collected_answers"].items())[-10:]
+        context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_10_conversations])
+
+        if next_field["field_id"] == "phone" and state["field_parsed_answers"].get("phone") == "":
+            question_prompt = (
+                f"Please generate a follow-up question in {language} (BCP-47 format) to ask for a valid phone number again. "
+                f"The user previously provided an invalid answer: '{state['collected_answers'].get(state['last_question'], '')}'. "
+                f"Explain briefly that we need a 10-12 digit numeric phone number, but keep it casual. "
+                f"Use this context: {context if context else 'No previous context'}. "
+                f"Provide only the question, no extra commentary."
+            )
+        else:
+            language_prompt = language if language != "en-IN" else "English"
+            question_prompt = (
+                f"Please generate a relevant and engaging question in {language_prompt} (BCP-47 format) that helps collect field data: {next_field['field_name']}. "
+                f"Here's some background to guide you: {next_field['additional_info']}. "
+                f"Ensure you use simple English equivalents for any complicated words (for example, use 'Address' instead of local terms like 'पता'). "
+                f"Provide the question in {next_field['datatype']} format—only the question itself, with no extra commentary. "
+                f"Keep the tone casual and feel free to mix in some English words if it makes the question flow better. "
+                f"Also, Make sure the generated question feels like a seamless continuation of our last conversation: {context if context else 'No previous context'}. "
+                f"Remember, we have already collected some answers in {state['field_parsed_answers']}, so if any information seems to be missing, ask smart follow-up questions to ensure complete data collection."
+            )
+
+        messages = [
+            SystemMessage(content="You are a conversational human that frames questions naturally."),
+            HumanMessage(content=question_prompt)
+        ]
+        natural_question = llm.invoke(messages).content.strip()
+        next_field_id = next_field["field_id"]
+
+    state["last_question"] = natural_question
+    state["start_conversation"] = False
+
+    # Prepare response
+    response_data = {
+        "message": natural_question,
+        "field_id": next_field_id
+    }
+    
+    response = jsonify(response_data)
+    response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
+    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    return response
+
 
 @app.route('/voice', methods=['POST'])
 def voice():
