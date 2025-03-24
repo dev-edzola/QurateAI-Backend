@@ -1272,9 +1272,9 @@ def chat_api():
     # Handle CORS preflight request
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
-        response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        # response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
+        # response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        # response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         return response
 
     # Parse incoming request
@@ -1368,7 +1368,7 @@ def chat_api():
             }
             del conversation_state[user_id]
             response = jsonify(response_data)
-            response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
+            # response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
             return response
 
     state["last_question"] = natural_question
@@ -1381,9 +1381,9 @@ def chat_api():
     }
     
     response = jsonify(response_data)
-    response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
-    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    # response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
+    # response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    # response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
     return response
 
 
