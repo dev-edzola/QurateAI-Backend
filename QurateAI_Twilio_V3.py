@@ -40,7 +40,8 @@ CORS(app, resources={
     r"/*": {
         "origins": [
             "http://localhost:8080",           # Local development
-            "https://qurate-ai-frontend.onrender.com"  # Production frontend
+            "https://qurate-ai-frontend.onrender.com",  # Production frontend
+            "https://twilio-flask-ysez.onrender.com"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
@@ -1581,7 +1582,7 @@ def set_awaiting_response():
         
         # Return a TwiML response with a pause to keep the call active
         twiml = VoiceResponse()
-        twiml.pause(length=15)  # Adjust length as needed
+        twiml.pause(length=60)  # Adjust length as needed
         return Response(twiml.to_xml(), mimetype='text/xml')
     
     return "Invalid call_id", 400
