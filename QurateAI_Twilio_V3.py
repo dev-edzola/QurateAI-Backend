@@ -15,12 +15,31 @@ from google.cloud import texttospeech
 from google.cloud import speech
 from dotenv import load_dotenv
 from flask_sock import Sock
+from flask_cors import CORS
 from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from langchain_anthropic import ChatAnthropic
 import numpy as np
 import glob
 load_dotenv()
+
+
+# Initialize Flask app
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.urandom(24)  # Keep this as is for now
+sock = Sock(app)
+
+# Enable CORS for the Flask app
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:8080",           # Local development
+            "https://qurate-ai-frontend.onrender.com"  # Production frontend
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Setup logging
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
@@ -1515,4 +1534,7 @@ def media(ws, call_id, session_id):
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
+
+
+
 
