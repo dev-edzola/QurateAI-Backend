@@ -43,8 +43,25 @@ CORS(app, resources={
     }
 })
 
+# Read the File_Disk value from the .env file (e.g., "/Files")
+file_disk = os.environ.get("File_Disk", "Files").lstrip("/")  # Remove leading slash if present
+
+# Set the base directory to be inside the directory of the current file plus the File_Disk subdirectory
+base_dir = os.path.join(os.path.dirname(__file__), file_disk)
+
+# Define the paths for your audio directories inside the base_dir
+AUDIO_DIR = os.path.join(base_dir, "audio_files")
+if not os.path.exists(AUDIO_DIR):
+    os.makedirs(AUDIO_DIR)
+
+TRANSCRIPTION_AUDIO_DIR = os.path.join(base_dir, "transcription_audio")
+if not os.path.exists(TRANSCRIPTION_AUDIO_DIR):
+    os.makedirs(TRANSCRIPTION_AUDIO_DIR)
+
+
+
 # Setup logging
-LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+LOG_DIR = os.path.join(base_dir, "logs")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
@@ -79,15 +96,15 @@ app_logger.setLevel(logging.INFO)
 ACTIVE_STREAMS = {}  # To track active WebSocket connections by call_id
 PROCESSED_SESSIONS = {}  # Format: {call_id: {session_id: timestamp}}
 
-# Set up a directory for audio files (absolute path)
-AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio_files")
-if not os.path.exists(AUDIO_DIR):
-    os.makedirs(AUDIO_DIR)
+# # Set up a directory for audio files (absolute path)
+# AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio_files")
+# if not os.path.exists(AUDIO_DIR):
+#     os.makedirs(AUDIO_DIR)
 
-# Setup directory for transcription audio
-TRANSCRIPTION_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "transcription_audio")
-if not os.path.exists(TRANSCRIPTION_AUDIO_DIR):
-    os.makedirs(TRANSCRIPTION_AUDIO_DIR)
+# # Setup directory for transcription audio
+# TRANSCRIPTION_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "transcription_audio")
+# if not os.path.exists(TRANSCRIPTION_AUDIO_DIR):
+#     os.makedirs(TRANSCRIPTION_AUDIO_DIR)
 
 # Initialize Flask app and Flask-Sock for raw WebSocket support
 app = Flask(__name__)
