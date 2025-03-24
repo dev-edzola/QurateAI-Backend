@@ -26,6 +26,8 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+app.config["DEBUG"] = False
+app.config["ENV"] = "production"
 app.config["SECRET_KEY"] = os.urandom(24)  # Keep this as is for now
 sock = Sock(app)
 
