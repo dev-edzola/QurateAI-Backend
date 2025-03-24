@@ -1286,7 +1286,7 @@ def chat_api():
             "form_fields": None,
             "collected_answers": {},
             "field_parsed_answers": {"language": None},
-            "field_asked_counter": {"language": 0, "fields": 0},
+            "field_asked_counter": {"language": 0},
             "language": "en-IN",
             "start_conversation": True,
             "last_question": "",
@@ -1298,7 +1298,7 @@ def chat_api():
     # Handle the user's answer based on the current step
     if answer and field_id:
         state["collected_answers"][state["last_question"]] = answer
-        state["field_asked_counter"][field_id] += 1
+        state["field_asked_counter"][field_id] = state["field_asked_counter"].get(field_id, 0) + 1
 
         if state["step"] == "ask_language":
             state["field_parsed_answers"] = parse_for_answers(
@@ -1334,9 +1334,17 @@ def chat_api():
 
     # Determine the next question based on the current step
     if state["step"] == "ask_language":
-        greeting = "Hello, I am Qurate, your personal telecaller assistant. " if state["start_conversation"] else ""
-        natural_question = greeting + "What language would you prefer to use for our conversation?"
-        next_field_id = "language"
+        greeting = "Hello, I am Qurate, your personal telecaller assistant." if state["start_conversation"] else None
+        next_field_id, natural_question = get_next_question(
+            form_fields=[{"field_id": "language", "field_name": "Language", "datatype": "string", "additional_info": "Preferred language"}],
+            collected_answers=state["collected_answers"],
+            field_parsed_answers=state["field_parsed_answers"],
+            field_asked_counter=state["field_asked_counter"],
+            llm=llm,
+            language=state["language"],
+            greeting_message=greeting,
+            audio=False
+        )
 
     elif state["step"] == "ask_fields":
         language_prompt = state["language"] if state["language"] != "en-IN" else "English"
@@ -1349,15 +1357,21 @@ def chat_api():
         next_field_id = "fields"
 
     elif state["step"] == "collect_data":
-        pending_fields = [
-            field for field in state["form_fields"]
-            if state["field_asked_counter"].get(field["field_id"], 0) < 3
-            and (state["field_parsed_answers"].get(field["field_id"]) is None or state["field_parsed_answers"].get(field["field_id"]) == "")
-        ]
-
-        if not pending_fields:
+        greeting = "Hello, I am Qurate, your personal telecaller assistant." if state["start_conversation"] else None
+        next_field_id, natural_question = get_next_question(
+            form_fields=state["form_fields"],
+            collected_answers=state["collected_answers"],
+            field_parsed_answers=state["field_parsed_answers"],
+            field_asked_counter=state["field_asked_counter"],
+            llm=llm,
+            language=state["language"],
+            greeting_message=greeting,
+            audio=False
+        )
+        
+        if next_field_id is None:  # No pending fields, conversation complete
             response_data = {
-                "message": "Thank you for providing all the details! Here's what we collected:",
+                "message": natural_question,  # This is the summary from get_next_question
                 "field_id": None,
                 "collected_answers": state["field_parsed_answers"]
             }
@@ -1365,38 +1379,6 @@ def chat_api():
             response = jsonify(response_data)
             response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
             return response
-
-        next_field = pending_fields[0]
-        language = state["language"]
-        last_10_conversations = list(state["collected_answers"].items())[-10:]
-        context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_10_conversations])
-
-        if next_field["field_id"] == "phone" and state["field_parsed_answers"].get("phone") == "":
-            question_prompt = (
-                f"Please generate a follow-up question in {language} (BCP-47 format) to ask for a valid phone number again. "
-                f"The user previously provided an invalid answer: '{state['collected_answers'].get(state['last_question'], '')}'. "
-                f"Explain briefly that we need a 10-12 digit numeric phone number, but keep it casual. "
-                f"Use this context: {context if context else 'No previous context'}. "
-                f"Provide only the question, no extra commentary."
-            )
-        else:
-            language_prompt = language if language != "en-IN" else "English"
-            question_prompt = (
-                f"Please generate a relevant and engaging question in {language_prompt} (BCP-47 format) that helps collect field data: {next_field['field_name']}. "
-                f"Here's some background to guide you: {next_field['additional_info']}. "
-                f"Ensure you use simple English equivalents for any complicated words (for example, use 'Address' instead of local terms like 'पता'). "
-                f"Provide the question in {next_field['datatype']} format—only the question itself, with no extra commentary. "
-                f"Keep the tone casual and feel free to mix in some English words if it makes the question flow better. "
-                f"Also, Make sure the generated question feels like a seamless continuation of our last conversation: {context if context else 'No previous context'}. "
-                f"Remember, we have already collected some answers in {state['field_parsed_answers']}, so if any information seems to be missing, ask smart follow-up questions to ensure complete data collection."
-            )
-
-        messages = [
-            SystemMessage(content="You are a conversational human that frames questions naturally."),
-            HumanMessage(content=question_prompt)
-        ]
-        natural_question = llm.invoke(messages).content.strip()
-        next_field_id = next_field["field_id"]
 
     state["last_question"] = natural_question
     state["start_conversation"] = False
