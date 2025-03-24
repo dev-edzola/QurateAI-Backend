@@ -1294,7 +1294,7 @@ def chat_api():
             "last_question": "",
             "step": "ask_fields"  # start by asking which fields to collect
         }
-
+ 
     state = conversation_state[user_id]
 
     # If the user has provided an answer, update the state accordingly.
@@ -1319,10 +1319,10 @@ def chat_api():
             # Initialize answers and asked counters for each field.
             state["field_parsed_answers"] = {field["field_id"]: None for field in fields}
             # Optionally, you can store the language answer directly if it was provided in the same response.
-            state["field_parsed_answers"]["language"] = state["collected_answers"].get(state["last_question"])
+            # state["field_parsed_answers"]["language"] = state["collected_answers"].get(state["last_question"])
             state["field_asked_counter"] = {field["field_id"]: 0 for field in fields}
             state["step"] = "collect_data"
-
+          
         elif state["step"] == "collect_data":
             # Update parsed answers for current field values.
             state["field_parsed_answers"] = parse_for_answers(
@@ -1339,15 +1339,16 @@ def chat_api():
                        ["en", "hi", "bn", "kn", "ml", "mr", "od", "pa", "ta", "te", "gu"] 
                     else (language_from_fields if language_from_fields.endswith("-IN") else "en-IN")
                 )
-
+         
     # Determine the next question based on the current step.
     if state["step"] == "ask_fields":
         # Ask the user what fields they would like to provide
         natural_question = "Please tell me what information you'd like me to collect. For example, you can say 'name, phone, age' or any other details you want."
-        next_field_id = "fields"  # we expect a composite answer that includes fields (and language if provided)
-
+        next_field_id = "language"  # we expect a composite answer that includes fields (and language if provided)
+    
     elif state["step"] == "collect_data":
         greeting = "Hello, I am Qurate, your personal telecaller assistant." if state["start_conversation"] else None
+        print("Hello: ", json.loads(json.dumps(state["field_parsed_answers"], indent=2)))
         next_field_id, natural_question = get_next_question(
             form_fields=state["form_fields"],
             collected_answers=state["collected_answers"],
