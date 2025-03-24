@@ -583,7 +583,10 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     )
  
     messages = [
-        SystemMessage(content="You are a conversational human that frames questions naturally."),
+        SystemMessage(content="You are a conversational human that frames questions naturally. "
+        "As a subject matter expert, your role is to thoughtfully guide the process of collecting meaningful and respectful information. "
+        "Please generate a relevant, engaging, and empathetic question that encourages honest sharing and provides deep insight into the topic, "
+        "while being sensitive to the context and experiences of the people involved."),
         HumanMessage(content=question_prompt)
     ]
     try:
@@ -1141,7 +1144,7 @@ def make_call():
         "field_parsed_answers": {field["field_id"]: None for field in form_fields},
         "field_asked_counter": {field["field_id"]: 0 for field in form_fields},
         "language": "en-IN",  # Default language set to Indian English
-        "greeting_message": "I am your personal telecaller assistant.",
+        "greeting_message": "Hello! I'm Meera, your AI assistant. It's lovely to connect with you.",
         "awaiting_response": False,  # Initially false while system is speaking
         "question_time": 0,         # Time when the system finished asking a question
         "max_wait_time": INITIAL_WAIT_TIMEOUT,  # Maximum time to wait for user to start talking
@@ -1347,8 +1350,8 @@ def chat_api():
         next_field_id = "language"  # we expect a composite answer that includes fields (and language if provided)
     
     elif state["step"] == "collect_data":
-        greeting = "Hello, I am Qurate, your personal telecaller assistant." if state["start_conversation"] else None
-        print("Hello: ", json.loads(json.dumps(state["field_parsed_answers"], indent=2)))
+        greeting = "Hello! I'm Meera, your AI assistant. It's lovely to connect with you." if state["start_conversation"] else None
+        # print("Hello: ", json.loads(json.dumps(state["field_parsed_answers"], indent=2)))
         next_field_id, natural_question = get_next_question(
             form_fields=state["form_fields"],
             collected_answers=state["collected_answers"],
