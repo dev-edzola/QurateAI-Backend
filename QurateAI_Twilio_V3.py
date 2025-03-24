@@ -110,7 +110,7 @@ PROCESSED_SESSIONS = {}  # Format: {call_id: {session_id: timestamp}}
 # TRANSCRIPTION_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "transcription_audio")
 # if not os.path.exists(TRANSCRIPTION_AUDIO_DIR):
 #     os.makedirs(TRANSCRIPTION_AUDIO_DIR)
-
+conversation_state = {}
 
 # Twilio credentials and host settings
 account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
@@ -1282,7 +1282,6 @@ def chat_api():
     user_id = data.get("user_id")
     answer = data.get("answer")
     field_id = data.get("field_id")
-
     # Initialize conversation state if it does not exist.
     if user_id not in conversation_state:
         conversation_state[user_id] = {
