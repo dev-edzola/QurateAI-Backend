@@ -561,6 +561,9 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         cleanup_call_audio_files(call_id)
         return None, generate_summary_response(field_parsed_answers, form_fields, llm, language=language_prompt)
     
+    if not pending_fields:
+        return None, "Thank you for your time."
+    
     next_field = pending_fields[0]
     # Use provided language if available; otherwise, default to "English"
     
@@ -1707,7 +1710,6 @@ def media(ws, call_id, session_id):
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
-
 
 
 
