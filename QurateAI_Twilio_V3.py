@@ -1273,7 +1273,7 @@ def chat_api():
         return response
 
     # Initialize LLM
-    llm = select_llm(choice='open_ai', model_name="gpt-4o-mini")
+    #llm = select_llm(choice='open_ai', model_name="gpt-4o-mini")
     
     # Parse incoming request
     data = request.get_json()
