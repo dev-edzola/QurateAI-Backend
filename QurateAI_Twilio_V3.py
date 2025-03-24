@@ -1275,8 +1275,6 @@ def chat_api():
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         return response
 
-    # Initialize LLM
-    llm = select_llm(choice='open_ai', model_name="gpt-4o-mini")
     
     # Parse incoming request
     data = request.get_json()
@@ -1352,7 +1350,7 @@ def chat_api():
 
     elif state["step"] == "ask_fields":
         language_prompt = state["language"] if state["language"] != "en-IN" else "English"
-        question_prompt = f"Please tell me what information you'd like me to collect in {language_prompt}. For example, you can say 'name, phone, age' or anything else you want."
+        question_prompt = f"Please tell me what information you'd like me to collect. For example, you can say 'name, phone, age' or anything else you want."
         messages = [
             SystemMessage(content="You are a conversational human that frames questions naturally."),
             HumanMessage(content=question_prompt)
