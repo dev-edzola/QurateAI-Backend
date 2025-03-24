@@ -544,7 +544,7 @@ def parse_for_answers(collected_answers, form_fields, llm):
         logger.error(f"Error parsing answers: {e}")
         return {}
 
-def get_next_question(form_fields, collected_answers, field_parsed_answers, field_asked_counter, llm, language="en-GB", greeting_message=None, call_id=None):
+def get_next_question(form_fields, collected_answers, field_parsed_answers, field_asked_counter, llm, language="en-GB", greeting_message=None, call_id=None, audio = True):
     """Generate the next question based on collected answers and question attempts"""
     pending_fields = [
         field for field in form_fields 
@@ -556,7 +556,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     language_prompt = language if language != None and not language.lower().startswith('en') else "English"
 
 
-    if not pending_fields:
+    if audio and not pending_fields:
         # Modified to just return a simple thank-you without asking for more
         cleanup_call_audio_files(call_id)
         return None, generate_summary_response(field_parsed_answers, form_fields, llm, language=language_prompt)
@@ -1273,7 +1273,7 @@ def chat_api():
         return response
 
     # Initialize LLM
-    #llm = select_llm(choice='open_ai', model_name="gpt-4o-mini")
+    llm = select_llm(choice='open_ai', model_name="gpt-4o-mini")
     
     # Parse incoming request
     data = request.get_json()

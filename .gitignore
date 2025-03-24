@@ -1,0 +1,81 @@
+# Python & Django related
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.sqlite3
+db.sqlite3
+*.log
+
+# Virtual Environment
+virtual_env/
+venv/
+env/
+*.env
+*.ini
+
+# JSON Key files
+service-account.json
+
+# Django specific
+/media/
+*/media/
+staticfiles/
+static/
+*.pot
+*.pyc
+*.so
+*.DS_Store
+*.log
+local_settings.py
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+*.iml
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# MacOS specific
+.DS_Store
+
+# System files
+Thumbs.db
+
+
+# test
+tests.py
+twilio_test.py
+outbound_call.py
+
+
+# Audio
+temp_audio_*.wav
+
+
+#frontend
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+
+
+
+# Application-specific #
+logs/
+audio_files/
+transcription_audio/
+google_credentials.json
