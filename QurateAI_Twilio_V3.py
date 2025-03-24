@@ -106,10 +106,6 @@ PROCESSED_SESSIONS = {}  # Format: {call_id: {session_id: timestamp}}
 # if not os.path.exists(TRANSCRIPTION_AUDIO_DIR):
 #     os.makedirs(TRANSCRIPTION_AUDIO_DIR)
 
-# Initialize Flask app and Flask-Sock for raw WebSocket support
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.urandom(24)
-sock = Sock(app)
 
 # Twilio credentials and host settings
 account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
@@ -1611,7 +1607,7 @@ def set_awaiting_response():
         
         # Return a TwiML response with a pause to keep the call active
         twiml = VoiceResponse()
-        twiml.pause(length=60)  # Adjust length as needed
+        twiml.pause(length=15)  # Adjust length as needed
         return Response(twiml.to_xml(), mimetype='text/xml')
     
     return "Invalid call_id", 400
