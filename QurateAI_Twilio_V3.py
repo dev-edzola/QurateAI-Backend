@@ -596,7 +596,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         else:
             natural_question = natural_question
         if greeting_message and not collected_answers:
-            natural_question = f"Hello, {greeting_message}. {natural_question}"
+            natural_question = f"{greeting_message}. {natural_question}"
         
         return next_field["field_id"], natural_question
     except Exception as e:
