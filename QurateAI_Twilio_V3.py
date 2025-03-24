@@ -15,21 +15,12 @@ from google.cloud import texttospeech
 from google.cloud import speech
 from dotenv import load_dotenv
 from flask_sock import Sock
-from flask_cors import CORS
 from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from langchain_anthropic import ChatAnthropic
 import numpy as np
 import glob
 load_dotenv()
-
-# Initialize Flask app
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.urandom(24)
-sock = Sock(app)
-
-# Enable CORS for the Flask app
-CORS(app, resources={r"/*": {"origins": ["http://localhost:8080", "https://qurate-ai-frontend.onrender.com"]}})
 
 # Setup logging
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
@@ -425,6 +416,10 @@ def generate_summary_response(field_parsed_answers, form_fields, llm, language="
     
     try:
         summary = llm.invoke(messages).content.strip()
+        if ":" in summary:
+            summary = summary.split(":", 1)[1].strip()
+        else:
+            summary = summary
         return summary
     except Exception as e:
         logger.error(f"Error generating summary response: {e}")
@@ -551,8 +546,13 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     ]
     try:
         natural_question = llm.invoke(messages).content.strip()
+        if ":" in natural_question:
+            natural_question = natural_question.split(":", 1)[1].strip()
+        else:
+            natural_question = natural_question
         if greeting_message and not collected_answers:
             natural_question = f"Hello, {greeting_message}. {natural_question}"
+        
         return next_field["field_id"], natural_question
     except Exception as e:
         logger.error(f"LLM error in get_next_question: {e}")
@@ -1515,7 +1515,4 @@ def media(ws, call_id, session_id):
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
-
-
-
 
