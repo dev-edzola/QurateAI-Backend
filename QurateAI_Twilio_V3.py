@@ -1263,6 +1263,7 @@ def get_default_form_fields():
         }
     ]
 
+
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat_api():
     global conversation_state
@@ -1270,93 +1271,80 @@ def chat_api():
     # Handle CORS preflight request
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
-        response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
+        response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
         return response
 
-    
     # Parse incoming request
     data = request.get_json()
     user_id = data.get("user_id")
     answer = data.get("answer")
     field_id = data.get("field_id")
 
-    # Initialize conversation state if not exists
+    # Initialize conversation state if it does not exist.
     if user_id not in conversation_state:
         conversation_state[user_id] = {
             "form_fields": None,
             "collected_answers": {},
-            "field_parsed_answers": {"language": None},
-            "field_asked_counter": {"language": 0},
-            "language": "en-IN",
+            "field_parsed_answers": {},
+            "field_asked_counter": {},
+            "language": "en-IN",  # default language
             "start_conversation": True,
             "last_question": "",
-            "step": "ask_language"
+            "step": "ask_fields"  # start by asking which fields to collect
         }
 
     state = conversation_state[user_id]
 
-    # Handle the user's answer based on the current step
+    # If the user has provided an answer, update the state accordingly.
     if answer and field_id:
         state["collected_answers"][state["last_question"]] = answer
         state["field_asked_counter"][field_id] = state["field_asked_counter"].get(field_id, 0) + 1
 
-        if state["step"] == "ask_language":
-            state["field_parsed_answers"] = parse_for_answers(
-                collected_answers=state["collected_answers"],
-                form_fields=[{"field_id": "language", "field_name": "Language", "datatype": "string", "additional_info": "Preferred language"}],
-                llm=llm
-            )
-            if state["field_parsed_answers"].get("language"):
-                lang = state["field_parsed_answers"]["language"]
-                state["language"] = f"{lang.lower()}-IN" if len(lang) == 2 and lang.lower() in ["en", "hi", "bn", "kn", "ml", "mr", "od", "pa", "ta", "te", "gu"] else (lang if lang.endswith("-IN") else "en-IN")
-            state["step"] = "ask_fields"
-
-        elif state["step"] == "ask_fields":
-            state["form_fields"] = parse_for_form_fields(user_query=answer, llm=llm).get("fields", [])
-            if not any(field["field_id"] == "language" for field in state["form_fields"]):
-                state["form_fields"].insert(0, {
+        if state["step"] == "ask_fields":
+            # Parse the answer for form fields as well as language preference.
+            # (Assume parse_for_form_fields now returns a dict that may include a "language" key.)
+            parsed_result = parse_for_form_fields(user_query=answer, llm=llm)
+            fields = parsed_result.get("fields", [])
+            # Ensure the language field is always present.
+            if not any(field["field_id"] == "language" for field in fields):
+                fields.insert(0, {
                     "field_id": "language",
                     "field_name": "Language",
                     "datatype": "string",
                     "additional_info": "This question is asked so that further communication can happen in that language"
                 })
-            state["field_parsed_answers"] = {field["field_id"]: None for field in state["form_fields"]}
+            state["form_fields"] = fields
+            # Initialize answers and asked counters for each field.
+            state["field_parsed_answers"] = {field["field_id"]: None for field in fields}
+            # Optionally, you can store the language answer directly if it was provided in the same response.
             state["field_parsed_answers"]["language"] = state["collected_answers"].get(state["last_question"])
-            state["field_asked_counter"] = {field["field_id"]: 0 for field in state["form_fields"]}
+            state["field_asked_counter"] = {field["field_id"]: 0 for field in fields}
             state["step"] = "collect_data"
 
         elif state["step"] == "collect_data":
+            # Update parsed answers for current field values.
             state["field_parsed_answers"] = parse_for_answers(
                 collected_answers=state["collected_answers"],
                 form_fields=state["form_fields"],
                 llm=llm
             )
+            language_from_fields = state["field_parsed_answers"].get("language")
+            if language_from_fields:
+                # Format language (if two-letter code, convert to something like 'en-IN', etc.)
+                state["language"] = (
+                    f"{language_from_fields.lower()}-IN" 
+                    if len(language_from_fields) == 2 and language_from_fields.lower() in 
+                       ["en", "hi", "bn", "kn", "ml", "mr", "od", "pa", "ta", "te", "gu"] 
+                    else (language_from_fields if language_from_fields.endswith("-IN") else "en-IN")
+                )
 
-    # Determine the next question based on the current step
-    if state["step"] == "ask_language":
-        greeting = "Hello, I am Qurate, your personal telecaller assistant." if state["start_conversation"] else None
-        next_field_id, natural_question = get_next_question(
-            form_fields=[{"field_id": "language", "field_name": "Language", "datatype": "string", "additional_info": "Preferred language"}],
-            collected_answers=state["collected_answers"],
-            field_parsed_answers=state["field_parsed_answers"],
-            field_asked_counter=state["field_asked_counter"],
-            llm=llm,
-            language=state["language"],
-            greeting_message=greeting,
-            audio=False
-        )
-
-    elif state["step"] == "ask_fields":
-        language_prompt = state["language"] if state["language"] != "en-IN" else "English"
-        question_prompt = f"Please tell me what information you'd like me to collect. For example, you can say 'name, phone, age' or anything else you want."
-        messages = [
-            SystemMessage(content="You are a conversational human that frames questions naturally."),
-            HumanMessage(content=question_prompt)
-        ]
-        natural_question = llm.invoke(messages).content.strip()
-        next_field_id = "fields"
+    # Determine the next question based on the current step.
+    if state["step"] == "ask_fields":
+        # Ask the user what fields they would like to provide
+        natural_question = "Please tell me what information you'd like me to collect. For example, you can say 'name, phone, age' or any other details you want."
+        next_field_id = "fields"  # we expect a composite answer that includes fields (and language if provided)
 
     elif state["step"] == "collect_data":
         greeting = "Hello, I am Qurate, your personal telecaller assistant." if state["start_conversation"] else None
@@ -1370,8 +1358,8 @@ def chat_api():
             greeting_message=greeting,
             audio=False
         )
-        
-        if next_field_id is None:  # No pending fields, conversation complete
+        # If there are no more pending fields, finish the conversation.
+        if next_field_id is None:
             response_data = {
                 "message": natural_question,  # This is the summary from get_next_question
                 "field_id": None,
@@ -1379,23 +1367,25 @@ def chat_api():
             }
             del conversation_state[user_id]
             response = jsonify(response_data)
-            response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
+            response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
             return response
 
     state["last_question"] = natural_question
     state["start_conversation"] = False
 
-    # Prepare response
+    # Prepare and send response.
     response_data = {
         "message": natural_question,
         "field_id": next_field_id
     }
     
     response = jsonify(response_data)
-    response.headers.add('Access-Control-Allow-Origin', 'https://qurate-ai-frontend.onrender.com')
+    response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
     response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
     return response
+
+
 
 
 @app.route('/voice', methods=['POST'])
@@ -1687,6 +1677,12 @@ def media(ws, call_id, session_id):
         client_data["websocket_connected"] = False
         ws.close()
     return
+
+
+
+
+
+
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
