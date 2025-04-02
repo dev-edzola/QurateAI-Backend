@@ -120,7 +120,8 @@ account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
 auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 twilio_client = Client(account_sid, auth_token)
 twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
-host = os.environ.get('HOST')  # e.g., your ngrok or public domain
+host = os.environ.get('HOST_DOMAIN')  # e.g., your ngrok or public domain
+
 db_host=os.environ.get('DB_HOST')
 db_user=os.environ.get('DB_USER')
 db_password=os.environ.get('DB_PASSWORD')
@@ -577,7 +578,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     """Generate the next question based on collected answers and question attempts"""
     pending_fields = [
         field for field in form_fields 
-        if field_asked_counter.get(field["field_id"], 0) < 4 and 
+        if field_asked_counter.get(field["field_id"], 0) < 3 and 
            (field_parsed_answers.get(field["field_id"]) is None or field_parsed_answers.get(field["field_id"]) == "")
     ]
 
@@ -1137,68 +1138,104 @@ def handle_ws_message(call_id, message, session_id):
 # --- HTTP Endpoints ---
 @app.route('/make-call', methods=['POST'])
 def make_call():
-    delete_stale_files(AUDIO_DIR, max_age_seconds=600)  # Clean up old audio files every time the server starts 
-    delete_stale_files(TRANSCRIPTION_AUDIO_DIR, max_age_seconds=600)  # Clean up old audio files every time the server starts
-    """Initiate a Twilio phone call with dynamically generated form fields based on user query"""
-    to_number = request.form.get('to', '')
+    delete_stale_files(AUDIO_DIR, max_age_seconds=600)
+    delete_stale_files(TRANSCRIPTION_AUDIO_DIR, max_age_seconds=600)
+    data = {}
+    if request.is_json:
+        data = request.get_json()
+    to_number = request.form.get('to') or data.get('to')
+    user_query = request.form.get('query') or data.get('query')
+    form_fields_id = request.form.get("form_fields_id") or data.get("form_fields_id")
+
     if not to_number:
         return "Please provide a 'to' phone number", 400
-    
-    # Get user query for form fields generation
-    user_query = request.form.get('query', '')
-    
-    # Parse form fields from user query
-    if user_query:
-        try:
-            form_fields_data = parse_for_form_fields(user_query, llm)
-            form_fields = form_fields_data.get('fields', [])
-            if not form_fields:
-                raise ValueError("No form fields generated")
-        except Exception as e:
-            logger.error(f"Error parsing form fields from query: {e}")
-            form_fields = get_default_form_fields()
-    else:
-        # Use default form fields if no query provided
-        form_fields = get_default_form_fields()
-    
 
+    form_fields = []
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            if form_fields_id:
+                cursor.execute("SELECT form_fields FROM form_fields WHERE id = %s", (form_fields_id,))
+                result = cursor.fetchone()
+                if not result:
+                    return jsonify({"error": "Invalid form_fields id"}), 400
+                form_fields = json.loads(result["form_fields"])
+            elif user_query:
+                try:
+                    form_fields_data = parse_for_form_fields(user_query, llm)
+                    form_fields = form_fields_data.get('fields', [])
+                    if not form_fields:
+                        raise ValueError("No form fields generated")
+                except Exception as e:
+                    logger.error(f"Error parsing form fields from query: {e}")
+                    form_fields = get_default_form_fields()
+            else:
+                form_fields = get_default_form_fields()
 
+            # Prepare call state
+            call_id = str(uuid.uuid4())
+            connected_clients[call_id] = {
+                "audio_recorder": AudioRecorder(),
+                "current_state": "initial",
+                "callSid": None,
+                "last_voice": time.time(),
+                "processing": False,
+                "last_processed": 0,
+                "form_fields": form_fields,
+                "collected_answers": OrderedDict(),
+                "field_parsed_answers": {field["field_id"]: None for field in form_fields},
+                "field_asked_counter": {field["field_id"]: 0 for field in form_fields},
+                "language": "en-IN",
+                "greeting_message": "Hello! I'm Meera, your AI assistant. It's lovely to connect with you.",
+                "awaiting_response": False,
+                "question_time": 0,
+                "max_wait_time": INITIAL_WAIT_TIMEOUT,
+                "silence_timeout": SILENCE_TIMEOUT,
+                "audio_session_id": 0,
+            }
 
-    call_id = str(uuid.uuid4())
-    connected_clients[call_id] = {
-        "audio_recorder": AudioRecorder(),  # New dedicated audio recorder
-        "current_state": "initial",
-        "callSid": None,
-        "last_voice": time.time(),
-        "processing": False,
-        "last_processed": 0,
-        "form_fields": form_fields,
-        "collected_answers": OrderedDict(),
-        "field_parsed_answers": {field["field_id"]: None for field in form_fields},
-        "field_asked_counter": {field["field_id"]: 0 for field in form_fields},
-        "language": "en-IN",  # Default language set to Indian English
-        "greeting_message": "Hello! I'm Meera, your AI assistant. It's lovely to connect with you.",
-        "awaiting_response": False,  # Initially false while system is speaking
-        "question_time": 0,         # Time when the system finished asking a question
-        "max_wait_time": INITIAL_WAIT_TIMEOUT,  # Maximum time to wait for user to start talking
-        "silence_timeout": SILENCE_TIMEOUT,     # Time of silence to wait after user stops talking
-        "audio_session_id": 0,      # Incremented for each new audio session to ensure isolation
-    }
-    
-    # Log the generated form fields for debugging
-    app_logger.info(f"Generated form fields for call {call_id}: {json.dumps(form_fields)}")
-    
-    call = twilio_client.calls.create(
-        to=to_number,
-        from_=twilio_phone_number,
-        url=f"https://{host}/voice?call_id={call_id}"
-    )
+            app_logger.info(f"Generated form fields for call {call_id}: {json.dumps(form_fields)}")
+            
+            call = twilio_client.calls.create(
+            to=to_number,
+            from_=twilio_phone_number,
+            url=f"https://{host}/voice?call_id={call_id}"
+        )
+            
+            # Insert communication into DB
+            cursor.execute("""
+                INSERT INTO communications 
+                (communication_type, form_fields_id, collected_answers, field_asked_counter, 
+                 language_info, field_parsed_answers, call_id, call_sid)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                "phone_call",
+                form_fields_id,
+                json.dumps(connected_clients[call_id]["collected_answers"]),
+                json.dumps(connected_clients[call_id]["field_asked_counter"]),
+                connected_clients[call_id]["language"],
+                json.dumps(connected_clients[call_id]["field_parsed_answers"]),
+                call_id,
+                call.sid
+            ))
+            connection.commit()
+            connected_clients[call_id]["communication_id"] = cursor.lastrowid
+            
+
+    except Exception as twilio_error:
+        logger.error(f"Twilio call initiation failed: {twilio_error}")
+        return jsonify({"error": "Failed to initiate call"}), 500        
+    finally:
+        connection.close()
+
     app_logger.info(f"Call initiated to {to_number} with call_id: {call_id}")
     return jsonify({
         "message": f"Call initiated with SID: {call.sid}",
         "call_id": call_id,
         "form_fields": form_fields
     }), 200
+
+
 
 def parse_for_form_fields(user_query, llm):
     """
@@ -1436,6 +1473,7 @@ def chat_api():
 @app.route('/voice', methods=['POST'])
 def voice():
     """Handle Twilio voice webhook with aggressive WebSocket management"""
+    
     call_id = request.args.get('call_id')
     call_sid = request.form.get('CallSid')
     logger.debug(f"Received voice webhook for call {call_id} with SID: {call_sid}")
@@ -1493,8 +1531,33 @@ def voice():
             llm,
             client_data.get("language"),
             client_data.get("greeting_message") if client_data["current_state"] == "initial" else None,
-            call_id=call_id
+            call_id=call_id,
+            audio=True
         )
+       
+        if(client_data.get("communication_id")):
+            
+            connection = get_db_connection()
+            try:
+                with connection.cursor() as cursor:
+                    update_sql = """
+                        UPDATE communications 
+                        SET collected_answers = %s, field_asked_counter = %s, field_parsed_answers = %s, language_info = %s 
+                        WHERE communication_id = %s
+                    """
+                    cursor.execute(update_sql, (
+                        json.dumps(client_data["collected_answers"]),
+                        json.dumps(client_data["field_asked_counter"]),
+                        json.dumps(client_data["field_parsed_answers"]),
+                        client_data.get("language"),
+                        client_data.get("communication_id")
+                    ))
+                    connection.commit()
+            except Exception as e:
+                connection.rollback()
+                return jsonify({"error": str(e)}), 500
+            finally:
+                connection.close()
         
         if field_id is None:
             client_data["current_state"] = "complete"
