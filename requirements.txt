@@ -146,3 +146,4 @@ zope.interface==7.2
 zstandard==0.23.0
 gunicorn==23.0.0
 flask-cors==5.0.1
+PyMySQL==1.1.1

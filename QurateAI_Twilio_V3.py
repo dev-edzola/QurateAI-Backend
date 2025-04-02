@@ -25,6 +25,9 @@ from langchain.schema import SystemMessage, HumanMessage
 from langchain_anthropic import ChatAnthropic
 import numpy as np
 import glob
+import pymysql
+import ssl
+from collections import OrderedDict
 load_dotenv()
 
 
@@ -118,7 +121,12 @@ auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 twilio_client = Client(account_sid, auth_token)
 twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
 host = os.environ.get('HOST')  # e.g., your ngrok or public domain
-
+db_host=os.environ.get('DB_HOST')
+db_user=os.environ.get('DB_USER')
+db_password=os.environ.get('DB_PASSWORD')
+db_name=os.environ.get('DB_NAME')
+frontend_host = os.environ.get('FRONTEND_HOST')
+db_port=int(os.environ.get('DB_PORT', 3306))
 # OpenAI API Key
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY")
@@ -231,6 +239,24 @@ def cleanup_stale_streams():
         ACTIVE_STREAMS.pop(call_sid, None)
     
     return len(streams_to_remove)
+
+
+def get_db_connection():
+    connection = pymysql.connect(
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        password=db_password,
+        db=db_name,
+        ssl={
+        "cert_reqs": ssl.CERT_NONE,
+        "check_hostname": False
+        },
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+    return connection
+
 
 # Health check endpoint for monitoring
 @app.route('/health', methods=['GET'])
@@ -484,6 +510,7 @@ def cleanup_call_audio_files(call_id):
     for file_path in glob.glob(response_pattern):
         try:
             os.remove(file_path)
+            logger.info(f"Deleted TTS file: {file_path}")
             files_deleted += 1
         except Exception as e:
             logger.error(f"Error deleting audio file {file_path}: {e}")
@@ -495,6 +522,7 @@ def cleanup_call_audio_files(call_id):
         for file_path in glob.glob(transcription_pattern):
             try:
                 os.remove(file_path)
+                logger.info(f"Deleted transcription file: {file_path}")
                 files_deleted += 1
             except Exception as e:
                 logger.error(f"Error deleting transcription file {file_path}: {e}")
@@ -1109,6 +1137,8 @@ def handle_ws_message(call_id, message, session_id):
 # --- HTTP Endpoints ---
 @app.route('/make-call', methods=['POST'])
 def make_call():
+    delete_stale_files(AUDIO_DIR, max_age_seconds=600)  # Clean up old audio files every time the server starts 
+    delete_stale_files(TRANSCRIPTION_AUDIO_DIR, max_age_seconds=600)  # Clean up old audio files every time the server starts
     """Initiate a Twilio phone call with dynamically generated form fields based on user query"""
     to_number = request.form.get('to', '')
     if not to_number:
@@ -1131,6 +1161,9 @@ def make_call():
         # Use default form fields if no query provided
         form_fields = get_default_form_fields()
     
+
+
+
     call_id = str(uuid.uuid4())
     connected_clients[call_id] = {
         "audio_recorder": AudioRecorder(),  # New dedicated audio recorder
@@ -1140,7 +1173,7 @@ def make_call():
         "processing": False,
         "last_processed": 0,
         "form_fields": form_fields,
-        "collected_answers": {},
+        "collected_answers": OrderedDict(),
         "field_parsed_answers": {field["field_id"]: None for field in form_fields},
         "field_asked_counter": {field["field_id"]: 0 for field in form_fields},
         "language": "en-IN",  # Default language set to Indian English
@@ -1221,7 +1254,15 @@ def parse_for_form_fields(user_query, llm):
             logger.warning(f"Could not set response_format for LLM: {e}")
             
         final_output = json_llm.invoke(messages).content.strip()
-        return extract_json(final_output)
+        form_fields = extract_json(final_output).get("fields", [])
+        if form_fields[0].get("field_id") != "language":
+            form_fields.insert(0, {
+                "field_id": "language",
+                "field_name": "Language",
+                "datatype": "string",
+                "additional_info": "This question is asked so that further communication can happen in that language",
+            })
+        return {"fields": form_fields} 
     except Exception as e:
         logger.error(f"Error in parse_for_form_fields: {e}")
         return {"fields": []}
@@ -1683,13 +1724,202 @@ def media(ws, call_id, session_id):
     return
 
 
+def delete_stale_files(directory, max_age_seconds=1200):
+    """Delete files older than max_age_seconds in a directory"""
+    now = time.time()
+    deleted_files = 0
+
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if os.path.isfile(file_path):
+            file_age = now - os.path.getmtime(file_path)
+            if file_age > max_age_seconds:
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Auto-cleanup: Deleted stale file: {file_path}")
+                    deleted_files += 1
+                except Exception as e:
+                    logger.error(f"Error deleting stale file {file_path}: {e}")
+    return deleted_files
+
+#-------------------
+
+@app.route('/generate_form_fields', methods=['POST'])
+def generate_form_fields():
+    data = request.get_json()
+    user_query = data.get("user_query")
+    if not user_query:
+        return jsonify({"error": "Missing user_query"}), 400
+
+    form_field_name = data.get("form_field_name")
+    if not form_field_name:
+        return jsonify({"error": "Missing form_field_name"}), 400
+
+    form_fields = parse_for_form_fields(user_query, llm).get("fields", [])
+    if not form_fields:
+        return jsonify({"error": "No form fields generated"}), 400
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = "INSERT INTO form_fields (form_field_name, form_fields) VALUES (%s, %s)"
+            cursor.execute(sql, (form_field_name, json.dumps(form_fields)))
+            connection.commit()
+            form_fields_id = cursor.lastrowid
+
+        form_link = f"https://{frontend_host}/chat?form_fields_id={form_fields_id}"
+        return jsonify({
+            "form_link": form_link,
+            "form_fields_id": form_fields_id,
+            "form_fields": form_fields
+        }), 201
+
+    except Exception as e:
+        connection.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        connection.close()
 
 
+@app.route('/collect', methods=['POST'])
+def collect():
+    data = request.get_json()
+    form_fields_id = data.get("form_fields_id")
+    communication_id = data.get("communication_id")
+    last_answer = data.get("answer")
+    last_field_id = data.get("field_id")
+    last_question = data.get("question")
+    
+    if not form_fields_id:
+        return jsonify({"error": "Missing form_fields id"}), 400
+    
 
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # If no communication_id, create a new communication row.
+            if not communication_id:
+                # First, fetch the form_fields from the form_fields table.
+                sql = "SELECT form_fields FROM form_fields WHERE id = %s"
+                cursor.execute(sql, (form_fields_id,))
+                result = cursor.fetchone()
+                if not result:
+                    return jsonify({"error": "Invalid form_fields id"}), 400
+                form_fields = json.loads(result["form_fields"])
 
+                # Initialize communication state.
+                collected_answers = OrderedDict()
+                field_asked_counter = {field["field_id"]: 0 for field in form_fields}
+                field_parsed_answers = {field["field_id"]: None for field in form_fields}
+                language_info = "en-IN"  # default language
+
+                # Insert the new communication row.
+                insert_sql = """
+                    INSERT INTO communications 
+                    (communication_type, form_fields_id, collected_answers, field_asked_counter, language_info, field_parsed_answers)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(insert_sql, (
+                    "text_chat",
+                    form_fields_id,
+                    json.dumps(collected_answers),
+                    json.dumps(field_asked_counter),
+                    language_info,
+                    json.dumps(field_parsed_answers)
+                ))
+                connection.commit()
+                communication_id = cursor.lastrowid
+                start_conversation = True
+            else:
+                # Retrieve the existing communication record.
+                sql = "SELECT * FROM communications WHERE communication_id = %s"
+                cursor.execute(sql, (communication_id,))
+                comm = cursor.fetchone()
+                if not comm:
+                    return jsonify({"error": "Invalid communication_id"}), 400
+
+                # Retrieve the form_fields from the form_fields table using the stored form_fields_id.
+                sql = "SELECT form_fields FROM form_fields WHERE id = %s"
+                cursor.execute(sql, (comm["form_fields_id"],))
+                result = cursor.fetchone()
+                if not result:
+                    return jsonify({"error": "Invalid form_fields id in communication"}), 400
+                form_fields = json.loads(result["form_fields"])
+
+                collected_answers = json.loads(comm["collected_answers"], object_pairs_hook=OrderedDict) if comm["collected_answers"] else {}
+                field_asked_counter = json.loads(comm["field_asked_counter"]) if comm["field_asked_counter"] else {}
+                field_parsed_answers = json.loads(comm["field_parsed_answers"]) if comm["field_parsed_answers"] else {}
+                language_info = field_parsed_answers.get('language') if field_parsed_answers.get('language') else "en-IN"
+                start_conversation = False
+
+            # If an answer and its field_id are provided, update state.
+            if last_answer and last_field_id and last_question:
+                # (You can modify the key used to index collected answers as needed.)
+                collected_answers[last_question] = last_answer
+                field_asked_counter[last_field_id] = field_asked_counter.get(last_field_id, 0) + 1
+                field_parsed_answers = parse_for_answers(
+                collected_answers=collected_answers,
+                form_fields=form_fields,
+                llm=llm
+                )
+            
+            # For new conversations, you might want to send a greeting.
+            greeting = "Hello! I'm Meera, your AI assistant. It's lovely to connect with you." if start_conversation else None
+
+            # Call get_next_question (assume this function and llm are defined/imported)
+            next_field_id, natural_question = get_next_question(
+                form_fields=form_fields,
+                collected_answers=collected_answers,
+                field_parsed_answers=field_parsed_answers,
+                field_asked_counter=field_asked_counter,
+                llm=llm,
+                language=language_info,
+                greeting_message=greeting,
+                audio=False
+            )
+
+            # If there is no next field, finish the conversation.
+            if next_field_id is None:
+                response_data = {
+                    "form_fields_id": form_fields_id,
+                    "message": natural_question,  # final summary or closing message
+                    "field_id": None,
+                    "field_parsed_answers": field_parsed_answers,
+                    "communication_id": communication_id
+                }
+            else:
+                response_data = {
+                    "form_fields_id": form_fields_id,
+                    "message": natural_question,
+                    "field_id": next_field_id,
+                    "field_parsed_answers": field_parsed_answers,
+                    "communication_id": communication_id
+                }
+
+            # Update the communication record with the new state.
+            update_sql = """
+                UPDATE communications 
+                SET collected_answers = %s, field_asked_counter = %s, field_parsed_answers = %s, language_info = %s 
+                WHERE communication_id = %s
+            """
+            cursor.execute(update_sql, (
+                json.dumps(collected_answers),
+                json.dumps(field_asked_counter),
+                json.dumps(field_parsed_answers),
+                language_info,
+                communication_id
+            ))
+            connection.commit()
+            # print(collected_answers)
+            return jsonify(response_data), 200
+    except Exception as e:
+        connection.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        connection.close()
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
-
 
 
