@@ -1845,6 +1845,79 @@ def generate_form_fields():
         connection.close()
 
 
+@app.route('/forms', methods=['GET'])
+def get_forms():
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = "SELECT * FROM QURATE_AI.form_fields WHERE is_active = 1"
+            cursor.execute(sql)
+            forms = cursor.fetchall()
+        return jsonify(forms), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        connection.close()
+
+
+@app.route('/forms/<int:form_id>', methods=['PATCH'])
+def update_form(form_id):
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    # Build the dynamic update clause based on provided fields.
+    update_fields = []
+    values = []
+    if "form_field_name" in data:
+        update_fields.append("form_field_name = %s")
+        values.append(data["form_field_name"])
+    if "form_fields" in data:
+        update_fields.append("form_fields = %s")
+        # Ensure that the JSON is stored as a string.
+        values.append(json.dumps(data["form_fields"]))
+    # You could allow updating "is_active" too if needed:
+    if "is_active" in data:
+        update_fields.append("is_active = %s")
+        values.append(data["is_active"])
+
+    if not update_fields:
+        return jsonify({"error": "No valid fields provided for update"}), 400
+
+    update_clause = ", ".join(update_fields)
+    sql = f"UPDATE QURATE_AI.form_fields SET {update_clause} WHERE id = %s"
+    values.append(form_id)
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql, tuple(values))
+            connection.commit()
+        return jsonify({"message": "Form updated successfully."}), 200
+    except Exception as e:
+        connection.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        connection.close()
+
+
+@app.route('/forms/<int:form_id>', methods=['DELETE'])
+def delete_form(form_id):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = "UPDATE QURATE_AI.form_fields SET is_active = 0 WHERE id = %s"
+            cursor.execute(sql, (form_id,))
+            connection.commit()
+        return jsonify({"message": "Form marked as inactive."}), 200
+    except Exception as e:
+        connection.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        connection.close()
+
+
+
 @app.route('/collect', methods=['POST'])
 def collect():
     data = request.get_json()
@@ -1864,7 +1937,7 @@ def collect():
             # If no communication_id, create a new communication row.
             if not communication_id:
                 # First, fetch the form_fields from the form_fields table.
-                sql = "SELECT form_fields FROM form_fields WHERE id = %s"
+                sql = "SELECT form_fields FROM form_fields WHERE id = %s and is_active = 1"
                 cursor.execute(sql, (form_fields_id,))
                 result = cursor.fetchone()
                 if not result:
