@@ -1,4 +1,4 @@
-# API Documentation for QURATE_AI.form_fields Endpoints
+# API Documentation for form_fields Endpoints
 
 This documentation covers the following endpoints:
 
