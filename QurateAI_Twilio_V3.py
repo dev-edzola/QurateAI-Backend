@@ -28,7 +28,9 @@ import glob
 import pymysql
 import ssl
 from collections import OrderedDict
-load_dotenv()
+from datetime import date
+
+load_dotenv(override=True)
 
 
 # Initialize Flask app
@@ -121,7 +123,7 @@ auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
 twilio_client = Client(account_sid, auth_token)
 twilio_phone_number = os.environ.get('TWILIO_PHONE_NUMBER')
 host = os.environ.get('HOST_DOMAIN')  # e.g., your ngrok or public domain
-
+POP_SOUND_URL = f"https://{host}/static/audio/pop.mp3"
 db_host=os.environ.get('DB_HOST')
 db_user=os.environ.get('DB_USER')
 db_password=os.environ.get('DB_PASSWORD')
@@ -461,6 +463,7 @@ def generate_summary_response(field_parsed_answers, form_fields, llm, language="
     
     prompt = f"""
     You are a helpful assistant summarizing information collected during a phone call.
+    Current date: {date.today()}.
     Please create a friendly summary of the following collected information in {language_prompt}:
     
     {collected_data_str}
@@ -555,6 +558,7 @@ def parse_for_answers(collected_answers, form_fields, llm):
     final_prompt = (
         f"Given the collected conversation: {collected_answers},\n"
         f"and the field instructions:\n{field_instructions}\n\n"
+        f"and the current date: {date.today()}\n\n"
         "Extract the information and create a JSON object where each key is a field_id and each value is the user's answer (translated to English). "
         "Correct any typos and include only the relevant part of each answer; if a field is unanswered, set its value to null. "
         "For the language field, ensure the value follows the BCP-47 format (e.g., hi-IN, en-IN, bn-IN) since most users are from India. "
@@ -621,11 +625,11 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     try:
         natural_question = llm.invoke(messages).content.strip()
         if ":" in natural_question:
-            natural_question = natural_question.split(":", 1)[1].strip()
+            natural_question = natural_question.split(":", 1)[1].strip().replace("`", "").replace("'", "").replace('"', "")
         else:
             natural_question = natural_question
         if greeting_message and not collected_answers:
-            natural_question = f"{greeting_message}. {natural_question}"
+            natural_question = f"{greeting_message}. I'll ask you a few quick questions. After each one, you can share your answer. Once you’ve finished speaking, you’ll hear a sound—that means your response has been recorded. Let’s start with this: {natural_question}"
         
         return next_field["field_id"], natural_question
     except Exception as e:
@@ -1049,6 +1053,23 @@ def process_with_empty_response(call_id, call_sid, session_id):
         except Exception as e:
             logger.error(f"Error redirecting call {call_id}: {e}")
 
+
+def async_play_pop_sound(call_sid):
+    # Build a VoiceResponse that plays the pop sound
+    response = VoiceResponse()
+    response.play(POP_SOUND_URL)
+    response.pause(length=60) 
+    try:
+        # Update the call with the TwiML generated response.
+        # This should trigger Twilio to play the pop sound.
+        twilio_client.calls(call_sid).update(twiml=response.to_xml())
+        logger.info(f"[{call_sid}] Pop sound played asynchronously via media injection")
+    except Exception as e:
+        logger.error(f"[{call_sid}] Failed to play pop sound asynchronously: {e}")
+
+
+
+
 def handle_ws_message(call_id, message, session_id):
     """Process incoming WebSocket messages with deduplication protection and reduced logging"""
     client_data = connected_clients[call_id]
@@ -1116,8 +1137,10 @@ def handle_ws_message(call_id, message, session_id):
             if not audio_recorder.is_speaking:
                 # If user hasn't started speaking within INITIAL_WAIT_TIMEOUT seconds, move on
                 if time_since_question > INITIAL_WAIT_TIMEOUT and not client_data.get("processing", False):
+                    eventlet.spawn_n(async_play_pop_sound, client_data.get("callSid"))
                     logger.debug(f"User did not speak for {INITIAL_WAIT_TIMEOUT} seconds after question. Moving to next question.")
-                    process_with_empty_response(call_id, data.get("callSid", ""), session_id)
+                    #async_play_pop_sound(client_data.get("callSid", ""))
+                    process_with_empty_response(call_id, client_data.get("callSid", ""), session_id)
             
             # CASE 2: User has spoken but has been silent for a while
             else:
@@ -1128,9 +1151,10 @@ def handle_ws_message(call_id, message, session_id):
                 if (silence_duration > SILENCE_TIMEOUT and 
                     not client_data.get("processing", False) and
                     not (call_id in PROCESSED_SESSIONS and session_id in PROCESSED_SESSIONS[call_id])):
-                    
+                    eventlet.spawn_n(async_play_pop_sound, client_data.get("callSid"))
                     logger.debug(f"Detected {SILENCE_TIMEOUT}s of silence after user spoke. Processing audio.")
-                    process_user_audio(call_id, data.get("callSid", ""), session_id)
+                    # async_play_pop_sound(client_data.get("callSid", ""))
+                    process_user_audio(call_id, client_data.get("callSid", ""), session_id)
             
         except Exception as e:
             logger.error(f"Error processing audio chunk for call {call_id}: {e}")
@@ -1195,7 +1219,6 @@ def make_call():
             }
 
             app_logger.info(f"Generated form fields for call {call_id}: {json.dumps(form_fields)}")
-            
             call = twilio_client.calls.create(
             to=to_number,
             from_=twilio_phone_number,
