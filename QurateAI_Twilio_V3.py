@@ -1860,6 +1860,25 @@ def get_forms():
         connection.close()
 
 
+@app.route('/forms/<int:form_id>', methods=['GET'])
+def get_specific_form(form_id):
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            # Retrieve the form only if it is active (is_active = 1)
+            sql = "SELECT * FROM QURATE_AI.form_fields WHERE id = %s AND is_active = 1"
+            cursor.execute(sql, (form_id,))
+            form = cursor.fetchone()
+            if not form:
+                return jsonify({"error": "Form not found or inactive"}), 404
+        return jsonify(form), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        connection.close()
+
+
+
 @app.route('/forms/<int:form_id>', methods=['PATCH'])
 def update_form(form_id):
     data = request.get_json()
