@@ -46,10 +46,10 @@ CORS(app, resources={
             "https://qurate-ai-frontend.onrender.com",  # Production frontend
             "https://twilio-flask-ysez.onrender.com"
         ],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
     }
-})
+}, supports_credentials=True)
 
 # Read the File_Disk value from the .env file (e.g., "/Files")
 file_disk = os.environ.get("File_Disk", "Files").lstrip("/")  # Remove leading slash if present
