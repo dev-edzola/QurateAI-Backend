@@ -49,9 +49,9 @@ CORS(app, resources={
             "https://twilio-flask-ysez.onrender.com"
         ],
         "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type"]
     }
-}, supports_credentials=True)
+})
 
 # Read the File_Disk value from the .env file (e.g., "/Files")
 file_disk = os.environ.get("File_Disk", "Files").lstrip("/")  # Remove leading slash if present
