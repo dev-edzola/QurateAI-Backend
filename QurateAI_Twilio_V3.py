@@ -463,7 +463,7 @@ def generate_summary_response(field_parsed_answers, form_fields, llm, language="
     
     prompt = f"""
     You are a helpful assistant summarizing information collected during a phone call.
-    Current date: {date.today()}.
+    Today's date: {date.today()}.
     Please create a friendly summary of the following collected information in {language_prompt}:
     
     {collected_data_str}
@@ -558,7 +558,7 @@ def parse_for_answers(collected_answers, form_fields, llm):
     final_prompt = (
         f"Given the collected conversation: {collected_answers},\n"
         f"and the field instructions:\n{field_instructions}\n\n"
-        f"and the current date: {date.today()}\n\n"
+        f"and the today's date: {date.today()}\n\n"
         "Extract the information and create a JSON object where each key is a field_id and each value is the user's answer (translated to English). "
         "Correct any typos and include only the relevant part of each answer; if a field is unanswered, set its value to null. "
         "For the language field, ensure the value follows the BCP-47 format (e.g., hi-IN, en-IN, bn-IN) since most users are from India. "
@@ -611,7 +611,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         f"This is attempt {field_asked_counter.get(next_field['field_id'], 0) + 1} for this field. "
         f"If this isn't the first attempt, try a different approach. "
         f"Here is our recent conversation context: {context if context else 'No previous context'}. "
-        f"Remember that we have already collected some answers: {field_parsed_answers}. "
+        f"Remember that we have already collected some answers: {field_parsed_answers}. Today's date: {date.today()}."
         "Feel free to ask follow-up questions or seek clarification if previous responses for current field were unclear. Tone: Show compassion and warmth in your question."
     )
  
@@ -627,10 +627,15 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         if ":" in natural_question:
             natural_question = natural_question.split(":", 1)[1].strip().replace("`", "").replace("'", "").replace('"', "")
         else:
-            natural_question = natural_question
+            natural_question = natural_question.strip().replace("`", "").replace("'", "").replace('"', "")
         if greeting_message and not collected_answers:
-            natural_question = f"{greeting_message}. I'll ask you a few quick questions. After each one, you can share your answer. Once you’ve finished speaking, you’ll hear a sound—that means your response has been recorded. Let’s start with this: {natural_question}"
-        
+            beep_message = ""
+            if audio:
+                beep_message = "I'll ask you a few quick questions. After each one, you can share your answer. Once you’ve finished speaking, you’ll hear a sound—that means your response has been recorded. Let’s start with this:"
+
+            natural_question = f"{greeting_message}. {beep_message} {natural_question}"
+            natural_question = natural_question.strip()
+
         return next_field["field_id"], natural_question
     except Exception as e:
         logger.error(f"LLM error in get_next_question: {e}")
