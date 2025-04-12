@@ -630,8 +630,8 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
             natural_question = natural_question.strip().replace("`", "").replace("'", "").replace('"', "")
         if greeting_message and not collected_answers:
             beep_message = ""
-            if audio:
-                beep_message = "I'll ask you a few quick questions. After each one, you can share your answer. Once you’ve finished speaking, you’ll hear a sound—that means your response has been recorded. Let’s start with this:"
+            # if audio:
+            #     beep_message = "I'll ask you a few quick questions. After each one, you can share your answer. Once you’ve finished speaking, you’ll hear a sound—that means your response has been recorded. Let’s start with this:"
 
             natural_question = f"{greeting_message}. {beep_message} {natural_question}"
             natural_question = natural_question.strip()
@@ -1142,7 +1142,7 @@ def handle_ws_message(call_id, message, session_id):
             if not audio_recorder.is_speaking:
                 # If user hasn't started speaking within INITIAL_WAIT_TIMEOUT seconds, move on
                 if time_since_question > INITIAL_WAIT_TIMEOUT and not client_data.get("processing", False):
-                    eventlet.spawn_n(async_play_pop_sound, client_data.get("callSid"))
+                    #eventlet.spawn_n(async_play_pop_sound, client_data.get("callSid"))
                     logger.debug(f"User did not speak for {INITIAL_WAIT_TIMEOUT} seconds after question. Moving to next question.")
                     #async_play_pop_sound(client_data.get("callSid", ""))
                     process_with_empty_response(call_id, client_data.get("callSid", ""), session_id)
@@ -1156,7 +1156,7 @@ def handle_ws_message(call_id, message, session_id):
                 if (silence_duration > SILENCE_TIMEOUT and 
                     not client_data.get("processing", False) and
                     not (call_id in PROCESSED_SESSIONS and session_id in PROCESSED_SESSIONS[call_id])):
-                    eventlet.spawn_n(async_play_pop_sound, client_data.get("callSid"))
+                    #eventlet.spawn_n(async_play_pop_sound, client_data.get("callSid"))
                     logger.debug(f"Detected {SILENCE_TIMEOUT}s of silence after user spoke. Processing audio.")
                     # async_play_pop_sound(client_data.get("callSid", ""))
                     process_user_audio(call_id, client_data.get("callSid", ""), session_id)
