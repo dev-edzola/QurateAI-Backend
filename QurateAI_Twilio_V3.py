@@ -12,7 +12,7 @@ import wave
 import random
 import logging
 from logging.handlers import RotatingFileHandler
-from flask import Flask, request, send_file, Response, jsonify
+from flask import Flask, request, send_file, Response, jsonify, make_response
 from twilio.twiml.voice_response import VoiceResponse, Start, Stop
 from twilio.rest import Client
 from google.cloud import texttospeech
@@ -29,15 +29,32 @@ import pymysql
 import ssl
 from collections import OrderedDict
 from datetime import date
+from auth import auth_bp
+import datetime
+from auth import configure_jwt_callbacks
+from flask_jwt_extended import (
+    JWTManager, jwt_required, get_jwt_identity, verify_jwt_in_request
+)
+
+
 
 load_dotenv(override=True)
 
 
 # Initialize Flask app
 app = Flask(__name__)
+
+app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=1)
+jwt = JWTManager(app)
+configure_jwt_callbacks(jwt)
+app.register_blueprint(auth_bp, url_prefix='/auth')
+
+
 app.config["DEBUG"] = False
 app.config["ENV"] = "production"
 app.config["SECRET_KEY"] = os.urandom(24)  # Keep this as is for now
+
 sock = Sock(app)
 
 # Enable CORS for the Flask app
@@ -49,7 +66,7 @@ CORS(app, resources={
             "https://twilio-flask-ysez.onrender.com"
         ],
         "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type","Authorization"]
     }
 })
 
@@ -260,22 +277,6 @@ def get_db_connection():
     )
     return connection
 
-
-# Health check endpoint for monitoring
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Simple health check endpoint that also cleans up stale connections"""
-    # Clean up any stale connections
-    num_removed = cleanup_stale_streams()
-    
-    # Return basic health information
-    return jsonify({
-        "status": "ok",
-        "active_streams": len(ACTIVE_STREAMS),
-        "active_clients": len(connected_clients),
-        "stale_streams_removed": num_removed,
-        "timestamp": time.time()
-    }), 200
 
 # Function to check WebSocket health during audio processing
 def check_websocket_health(call_id, session_id):
@@ -1166,6 +1167,7 @@ def handle_ws_message(call_id, message, session_id):
 
 # --- HTTP Endpoints ---
 @app.route('/make-call', methods=['POST'])
+@jwt_required()
 def make_call():
     delete_stale_files(AUDIO_DIR, max_age_seconds=600)
     delete_stale_files(TRANSCRIPTION_AUDIO_DIR, max_age_seconds=600)
@@ -1372,129 +1374,6 @@ def get_default_form_fields():
             "additional_info": "The product(s) the user is interested in"
         }
     ]
-
-
-@app.route('/chat', methods=['POST', 'OPTIONS'])
-def chat_api():
-    global conversation_state
-    
-    # Handle CORS preflight request
-    if request.method == "OPTIONS":
-        response = jsonify({"status": "ok"})
-        # response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
-        # response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        # response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return response
-
-    # Parse incoming request
-    data = request.get_json()
-    user_id = data.get("user_id")
-    answer = data.get("answer")
-    field_id = data.get("field_id")
-    # Initialize conversation state if it does not exist.
-    if user_id not in conversation_state:
-        conversation_state[user_id] = {
-            "form_fields": None,
-            "collected_answers": {},
-            "field_parsed_answers": {},
-            "field_asked_counter": {},
-            "language": "en-IN",  # default language
-            "start_conversation": True,
-            "last_question": "",
-            "step": "ask_fields"  # start by asking which fields to collect
-        }
- 
-    state = conversation_state[user_id]
-
-    # If the user has provided an answer, update the state accordingly.
-    if answer and field_id:
-        state["collected_answers"][state["last_question"]] = answer
-        state["field_asked_counter"][field_id] = state["field_asked_counter"].get(field_id, 0) + 1
-
-        if state["step"] == "ask_fields":
-            # Parse the answer for form fields as well as language preference.
-            # (Assume parse_for_form_fields now returns a dict that may include a "language" key.)
-            parsed_result = parse_for_form_fields(user_query=answer, llm=llm)
-            fields = parsed_result.get("fields", [])
-            # Ensure the language field is always present.
-            if not any(field["field_id"] == "language" for field in fields):
-                fields.insert(0, {
-                    "field_id": "language",
-                    "field_name": "Language",
-                    "datatype": "string",
-                    "additional_info": "This question is asked so that further communication can happen in that language"
-                })
-            state["form_fields"] = fields
-            # Initialize answers and asked counters for each field.
-            state["field_parsed_answers"] = {field["field_id"]: None for field in fields}
-            # Optionally, you can store the language answer directly if it was provided in the same response.
-            # state["field_parsed_answers"]["language"] = state["collected_answers"].get(state["last_question"])
-            state["field_asked_counter"] = {field["field_id"]: 0 for field in fields}
-            state["step"] = "collect_data"
-          
-        elif state["step"] == "collect_data":
-            # Update parsed answers for current field values.
-            state["field_parsed_answers"] = parse_for_answers(
-                collected_answers=state["collected_answers"],
-                form_fields=state["form_fields"],
-                llm=llm
-            )
-            language_from_fields = state["field_parsed_answers"].get("language")
-            if language_from_fields:
-                # Format language (if two-letter code, convert to something like 'en-IN', etc.)
-                state["language"] = (
-                    f"{language_from_fields.lower()}-IN" 
-                    if len(language_from_fields) == 2 and language_from_fields.lower() in 
-                       ["en", "hi", "bn", "kn", "ml", "mr", "od", "pa", "ta", "te", "gu"] 
-                    else (language_from_fields if language_from_fields.endswith("-IN") else "en-IN")
-                )
-         
-    # Determine the next question based on the current step.
-    if state["step"] == "ask_fields":
-        # Ask the user what fields they would like to provide
-        natural_question = "Please tell me what information you'd like me to collect. For example, you can say 'name, phone, age' or any other details you want."
-        next_field_id = "language"  # we expect a composite answer that includes fields (and language if provided)
-    
-    elif state["step"] == "collect_data":
-        greeting = "Hello! I'm Meera, your AI assistant. It's lovely to connect with you." if state["start_conversation"] else None
-        # print("Hello: ", json.loads(json.dumps(state["field_parsed_answers"], indent=2)))
-        next_field_id, natural_question = get_next_question(
-            form_fields=state["form_fields"],
-            collected_answers=state["collected_answers"],
-            field_parsed_answers=state["field_parsed_answers"],
-            field_asked_counter=state["field_asked_counter"],
-            llm=llm,
-            language=state["language"],
-            greeting_message=greeting,
-            audio=False
-        )
-        # If there are no more pending fields, finish the conversation.
-        if next_field_id is None:
-            response_data = {
-                "message": natural_question,  # This is the summary from get_next_question
-                "field_id": None,
-                "collected_answers": state["field_parsed_answers"]
-            }
-            del conversation_state[user_id]
-            response = jsonify(response_data)
-            # response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
-            return response
-
-    state["last_question"] = natural_question
-    state["start_conversation"] = False
-
-    # Prepare and send response.
-    response_data = {
-        "message": natural_question,
-        "field_id": next_field_id
-    }
-    
-    response = jsonify(response_data)
-    # response.headers.add('Access-Control-Allow-Origin', 'https://twilio-flask-ysez.onrender.com')
-    # response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    # response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    return response
-
 
 
 
@@ -1836,7 +1715,9 @@ def delete_stale_files(directory, max_age_seconds=1200):
 #-------------------
 
 @app.route('/generate_form_fields', methods=['POST'])
+@jwt_required()
 def generate_form_fields():
+    current_user_id = get_jwt_identity()
     data = request.get_json()
     user_query = data.get("user_query")
     if not user_query:
@@ -1853,8 +1734,11 @@ def generate_form_fields():
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            sql = "INSERT INTO form_fields (form_field_name, form_fields) VALUES (%s, %s)"
-            cursor.execute(sql, (form_field_name, json.dumps(form_fields)))
+            sql = (
+                "INSERT INTO QURATE_AI.form_fields "
+                "(user_id, form_field_name, form_fields) VALUES (%s, %s, %s)"
+            )
+            cursor.execute(sql, (current_user_id, form_field_name, json.dumps(form_fields)))
             connection.commit()
             form_fields_id = cursor.lastrowid
 
@@ -1874,12 +1758,18 @@ def generate_form_fields():
 
 
 @app.route('/forms', methods=['GET'])
+@jwt_required()
 def get_forms():
+    current_user_id = get_jwt_identity()
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            sql = "SELECT * FROM QURATE_AI.form_fields WHERE is_active = 1"
-            cursor.execute(sql)
+            sql = (
+                "SELECT * FROM QURATE_AI.form_fields "
+                "WHERE user_id IS NOT NULL AND user_id = %s AND is_active = 1 "
+                "ORDER BY updated_at DESC"
+            )
+            cursor.execute(sql, (current_user_id,))
             forms = cursor.fetchall()
         return jsonify(forms), 200
     except Exception as e:
@@ -1889,13 +1779,17 @@ def get_forms():
 
 
 @app.route('/forms/<int:form_id>', methods=['GET'])
+@jwt_required()
 def get_specific_form(form_id):
+    current_user_id = get_jwt_identity()
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            # Retrieve the form only if it is active (is_active = 1)
-            sql = "SELECT * FROM QURATE_AI.form_fields WHERE id = %s AND is_active = 1"
-            cursor.execute(sql, (form_id,))
+            sql = (
+                "SELECT * FROM QURATE_AI.form_fields "
+                "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s AND is_active = 1"
+            )
+            cursor.execute(sql, (form_id, current_user_id))
             form = cursor.fetchone()
             if not form:
                 return jsonify({"error": "Form not found or inactive"}), 404
@@ -1906,14 +1800,14 @@ def get_specific_form(form_id):
         connection.close()
 
 
-
 @app.route('/forms/<int:form_id>', methods=['PATCH'])
+@jwt_required()
 def update_form(form_id):
+    current_user_id = get_jwt_identity()
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    # Build the dynamic update clause based on provided fields.
     update_fields = []
     values = []
     if "form_field_name" in data:
@@ -1921,9 +1815,7 @@ def update_form(form_id):
         values.append(data["form_field_name"])
     if "form_fields" in data:
         update_fields.append("form_fields = %s")
-        # Ensure that the JSON is stored as a string.
         values.append(json.dumps(data["form_fields"]))
-    # You could allow updating "is_active" too if needed:
     if "is_active" in data:
         update_fields.append("is_active = %s")
         values.append(data["is_active"])
@@ -1932,13 +1824,18 @@ def update_form(form_id):
         return jsonify({"error": "No valid fields provided for update"}), 400
 
     update_clause = ", ".join(update_fields)
-    sql = f"UPDATE QURATE_AI.form_fields SET {update_clause} WHERE id = %s"
-    values.append(form_id)
+    sql = (
+        f"UPDATE QURATE_AI.form_fields SET {update_clause} "
+        "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s AND is_active = 1"
+    )
+    values.extend([form_id, current_user_id])
 
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
             cursor.execute(sql, tuple(values))
+            if cursor.rowcount == 0:
+                return jsonify({"error": "Form not found or no permission."}), 404
             connection.commit()
         return jsonify({"message": "Form updated successfully."}), 200
     except Exception as e:
@@ -1949,12 +1846,19 @@ def update_form(form_id):
 
 
 @app.route('/forms/<int:form_id>', methods=['DELETE'])
+@jwt_required()
 def delete_form(form_id):
+    current_user_id = get_jwt_identity()
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            sql = "UPDATE QURATE_AI.form_fields SET is_active = 0 WHERE id = %s"
-            cursor.execute(sql, (form_id,))
+            sql = (
+                "UPDATE QURATE_AI.form_fields SET is_active = 0 "
+                "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s"
+            )
+            cursor.execute(sql, (form_id, current_user_id))
+            if cursor.rowcount == 0:
+                return jsonify({"error": "Form not found or no permission."}), 404
             connection.commit()
         return jsonify({"message": "Form marked as inactive."}), 200
     except Exception as e:
