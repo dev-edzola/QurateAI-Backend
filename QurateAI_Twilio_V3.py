@@ -38,7 +38,7 @@ from flask_jwt_extended import (
 
 
 
-load_dotenv(override=True)
+load_dotenv()
 
 
 # Initialize Flask app
