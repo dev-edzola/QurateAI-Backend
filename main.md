@@ -52,7 +52,7 @@
 }
 ```
 
-**Error Codes:** 400 (Missing input), 500 (DB Error)
+**Error Codes:** 400 (Missing input), 409 (Duplicate form), 500 (DB Error)
 
 ---
 

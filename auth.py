@@ -1,10 +1,8 @@
-import os
 import datetime
-import pymysql
-import ssl
 import jwt as pyjwt
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
+from db_management import get_db_connection
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -13,19 +11,7 @@ from flask_jwt_extended import (
     get_jwt
 )
 
-auth_bp = Blueprint('auth', __name__)
-
-def get_db_connection():
-    return pymysql.connect(
-        host=os.environ["DB_HOST"],
-        port=int(os.environ.get("DB_PORT", 3306)),
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-        db=os.environ["DB_NAME"],
-        ssl={"cert_reqs": ssl.CERT_NONE, "check_hostname": False},
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
+auth_bp = Blueprint('auth_bp', __name__)
 
 def configure_jwt_callbacks(jwt):
     @jwt.token_in_blocklist_loader
