@@ -125,7 +125,7 @@ Authorization: Bearer <refresh_token>
 - `200 OK`  
   ```json
   {
-    "reset_token": "..."  // valid for 15 minutes
+    "message": "If that email exists, a reset link has been sent."  // valid for 15 minutes
   }
   ```
 - `400 Bad Request` – Missing `email`.  

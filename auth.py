@@ -184,35 +184,30 @@ def forget_password():
             cursor.execute("SELECT id FROM users WHERE email=%s", (email,))
             user = cursor.fetchone()
 
-        if not user:
-            return jsonify(message="No user with that email."), 404
+        # Always respond 200 to avoid revealing whether the email exists
+        if user:
+            serializer = get_serializer()
+            token = serializer.dumps(
+                user['id'],
+                salt=current_app.config['PASSWORD_RESET_SALT']
+            )
 
-        # Generate a time-limited token
-        serializer = get_serializer()
-        reset_token = serializer.dumps(
-            user['id'],
-            salt=current_app.config['PASSWORD_RESET_SALT']
-        )
+            reset_url = (
+                "https://qurate-ai-frontend.onrender.com"
+                f"/reset-password?reset_id={token}"
+            )
 
-        # Build the frontend URL
-        reset_url = (
-            "https://qurate-ai-frontend.onrender.com"
-            f"/reset-password?reset_id={reset_token}"
-        )
+            msg = Message(
+                subject="Reset Your Qurate-AI Password",
+                recipients=[email]
+            )
+            msg.html = render_template(
+                'reset_password_email.html',
+                reset_url=reset_url
+            )
+            mail.send(msg)
 
-        # Compose & send the HTML email
-        msg = Message(
-            subject="Reset Your Qurate-AI Password",
-            recipients=[email]
-        )
-        msg.html = render_template(
-            'reset_password_email.html',
-            reset_url=reset_url
-        )
-        mail.send(msg)
-
-        # Return the token as before
-        return jsonify(reset_token=reset_token), 200
+        return jsonify(message="If that email exists, a reset link has been sent."), 200
 
     except Exception:
         current_app.logger.exception("Error in forget-password")
