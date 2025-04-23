@@ -29,11 +29,15 @@ def configure_jwt_callbacks(jwt):
         finally:
             conn.close()
 
+# Serializer helper
+def get_serializer():
+    return URLSafeTimedSerializer(current_app.config['JWT_SECRET_KEY'])
+
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json() or {}
     username = data.get('username')
-    email = data.get('email')
+    email    = data.get('email')
     password = data.get('password')
 
     if not username or not email or not password:
@@ -42,22 +46,93 @@ def signup():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            # Check existing user
             cursor.execute(
-                "SELECT id FROM users WHERE username=%s OR email=%s", (username, email)
+                "SELECT id FROM users WHERE username=%s OR email=%s",
+                (username, email)
             )
             if cursor.fetchone():
                 return jsonify(message="User already exists."), 409
 
+            # Insert inactive user
             pwd_hash = generate_password_hash(password)
             cursor.execute(
-                "INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)",
+                "INSERT INTO users (username, email, password_hash, Active) "
+                "VALUES (%s, %s, %s, 0)",
                 (username, email, pwd_hash)
             )
+            user_id = cursor.lastrowid
             conn.commit()
-        return jsonify(message="User created."), 201
+
+        # Generate activation token (valid 24h)
+        serializer = get_serializer()
+        token = serializer.dumps(
+            user_id,
+            salt=current_app.config['ACTIVATION_SALT']
+        )
+        activate_url = (
+            "https://qurate-ai-frontend.onrender.com/activate"
+            f"?token={token}"
+        )
+
+        # Send email
+        msg = Message(
+            subject="Activate Your Qurate-AI Account",
+            recipients=[email]
+        )
+        msg.html = render_template(
+            'activate_account_email.html',
+            username=username,
+            activate_url=activate_url
+        )
+        mail.send(msg)
+
+        return jsonify(message="User created. Activation email sent."), 201
+
     except Exception as e:
         conn.rollback()
-        return jsonify(error=str(e)), 500
+        current_app.logger.exception("Error in signup")
+        return jsonify(error="Signup failed."), 500
+
+    finally:
+        conn.close()
+
+
+@auth_bp.route('/activate', methods=['GET'])
+def activate_account():
+    token = request.args.get('token')
+    if not token:
+        return jsonify(message="Activation token required."), 400
+
+    serializer = get_serializer()
+    try:
+        user_id = serializer.loads(
+            token,
+            salt=current_app.config['ACTIVATION_SALT'],
+            max_age=24 * 3600  # 24 hours
+        )
+    except SignatureExpired:
+        return jsonify(message="Activation link expired."), 400
+    except BadSignature:
+        return jsonify(message="Invalid activation token."), 400
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE users SET Active = 1 WHERE id = %s",
+                (user_id,)
+            )
+            conn.commit()
+        return jsonify(
+            message="Account activated successfully.",
+            activated=True
+        ), 200
+
+    except Exception:
+        current_app.logger.exception("Error activating account")
+        return jsonify(error="Account activation failed."), 500
+
     finally:
         conn.close()
 
@@ -74,7 +149,7 @@ def login():
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT id, password_hash FROM users WHERE username=%s", (username,)
+                "SELECT id, password_hash FROM users WHERE username=%s AND Active = 1", (username,)
             )
             user = cursor.fetchone()
 
@@ -113,10 +188,10 @@ def forget_password():
             return jsonify(message="No user with that email."), 404
 
         # Generate a time-limited token
-        serializer = URLSafeTimedSerializer(current_app.config['JWT_SECRET_KEY'])
+        serializer = get_serializer()
         reset_token = serializer.dumps(
             user['id'],
-            salt='password-reset-salt'
+            salt=current_app.config['PASSWORD_RESET_SALT']
         )
 
         # Build the frontend URL
@@ -156,11 +231,11 @@ def reset_password():
         return jsonify(message="Token and new password required."), 400
 
     # 1. Load & verify the token
-    serializer = URLSafeTimedSerializer(current_app.config['JWT_SECRET_KEY'])
+    serializer = get_serializer()
     try:
         user_id = serializer.loads(
             token,
-            salt='password-reset-salt',
+            salt=current_app.config['PASSWORD_RESET_SALT'],
             max_age=15 * 60  # seconds
         )
     except SignatureExpired:
