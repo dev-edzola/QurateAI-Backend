@@ -10,7 +10,9 @@ db.sqlite3
 # Virtual Environment
 virtual_env/
 venv/
+.venv/
 env/
+.env/
 *.env
 *.ini
 

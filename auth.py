@@ -1,6 +1,6 @@
 import datetime
 import jwt as pyjwt
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, render_template
 from werkzeug.security import generate_password_hash, check_password_hash
 from db_management import get_db_connection
 from flask_jwt_extended import (
@@ -10,6 +10,10 @@ from flask_jwt_extended import (
     get_jwt_identity,
     get_jwt
 )
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
+from mail_config import mail
+from flask_mail import Message
 
 auth_bp = Blueprint('auth_bp', __name__)
 
@@ -96,7 +100,6 @@ def refresh():
 def forget_password():
     data = request.get_json() or {}
     email = data.get('email')
-
     if not email:
         return jsonify(message="Email required."), 400
 
@@ -109,41 +112,63 @@ def forget_password():
         if not user:
             return jsonify(message="No user with that email."), 404
 
-        reset_token = pyjwt.encode(
-            {
-                'user_id': user['id'],
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
-            },
-            current_app.config['JWT_SECRET_KEY'],
-            algorithm="HS256"
+        # Generate a time-limited token
+        serializer = URLSafeTimedSerializer(current_app.config['JWT_SECRET_KEY'])
+        reset_token = serializer.dumps(
+            user['id'],
+            salt='password-reset-salt'
         )
+
+        # Build the frontend URL
+        reset_url = (
+            "https://qurate-ai-frontend.onrender.com"
+            f"/reset-password?reset_id={reset_token}"
+        )
+
+        # Compose & send the HTML email
+        msg = Message(
+            subject="Reset Your Qurate-AI Password",
+            recipients=[email]
+        )
+        msg.html = render_template(
+            'reset_password_email.html',
+            reset_url=reset_url
+        )
+        mail.send(msg)
+
+        # Return the token as before
         return jsonify(reset_token=reset_token), 200
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+
+    except Exception:
+        current_app.logger.exception("Error in forget-password")
+        return jsonify(error="Unable to send reset email."), 500
+
     finally:
         conn.close()
 
 @auth_bp.route('/reset-password', methods=['POST'])
 def reset_password():
     data = request.get_json() or {}
-    token = data.get('reset_token')
+    token   = data.get('reset_token')
     new_pwd = data.get('new_password')
 
     if not token or not new_pwd:
         return jsonify(message="Token and new password required."), 400
 
+    # 1. Load & verify the token
+    serializer = URLSafeTimedSerializer(current_app.config['JWT_SECRET_KEY'])
     try:
-        decoded = pyjwt.decode(
+        user_id = serializer.loads(
             token,
-            current_app.config['JWT_SECRET_KEY'],
-            algorithms=["HS256"]
+            salt='password-reset-salt',
+            max_age=15 * 60  # seconds
         )
-        user_id = decoded['user_id']
-    except pyjwt.ExpiredSignatureError:
+    except SignatureExpired:
         return jsonify(message="Reset token expired."), 401
-    except pyjwt.InvalidTokenError:
+    except BadSignature:
         return jsonify(message="Invalid reset token."), 401
 
+    # 2. Update the password
     conn = get_db_connection()
     try:
         pwd_hash = generate_password_hash(new_pwd)

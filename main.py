@@ -26,10 +26,15 @@ from communications import communications_bp
 import datetime
 from auth import configure_jwt_callbacks
 from flask_jwt_extended import JWTManager
-
+from mail_config import mail, init_mail
 
 # Initialize Flask app
 app = Flask(__name__)
+
+#–– Mail config ––
+init_mail(app)
+
+
 
 app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=1)
