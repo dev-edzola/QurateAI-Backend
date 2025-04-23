@@ -34,28 +34,66 @@ def configure_jwt_callbacks(jwt):
 def get_serializer():
     return URLSafeTimedSerializer(current_app.config['JWT_SECRET_KEY'])
 
+def send_activation_email(user_id: int, email: str, username: str, reactivate: bool = False):
+    """
+    Sends (or re-sends) an account activation link.
+    If reactivate=True, subject/text can differ if you want.
+    """
+    serializer = get_serializer()
+    token = serializer.dumps(user_id, salt=current_app.config['ACTIVATION_SALT'])
+    host  = current_app.config['FRONTEND_HOST']
+    url   = f"https://{host}/activate?token={token}"
+    
+    subject = (
+        "Reactivate Your Qurate-AI Account"
+        if reactivate else
+        "Activate Your Qurate-AI Account"
+    )
+    
+    msg = Message(subject=subject, recipients=[email])
+    msg.html = render_template(
+        'activate_account_email.html',
+        username=username,
+        activate_url=url
+    )
+    mail.send(msg)
+
+
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
-    data = request.get_json() or {}
+    data     = request.get_json() or {}
     username = data.get('username')
     email    = data.get('email')
     password = data.get('password')
-
-    if not username or not email or not password:
+    if not (username and email and password):
         return jsonify(message="Missing required fields."), 400
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Check existing user
+            # One query to find any existing user by username OR email
             cursor.execute(
-                "SELECT id FROM users WHERE username=%s OR email=%s",
+                "SELECT id, username, email, Active "
+                "FROM users WHERE username=%s OR email=%s",
                 (username, email)
             )
-            if cursor.fetchone():
+            existing = cursor.fetchone()
+
+            if existing:
+                # 1) Exact email match
+                if existing['email'] == email:
+                    if existing['Active'] == 1:
+                        return jsonify(message="User already exists."), 409
+                    # inactive email → resend activation
+                    send_activation_email(existing['id'], email, username, reactivate=True)
+                    return jsonify(
+                        message="Account already exists but is inactive; activation link resent."
+                    ), 200
+
+                # 2) Otherwise, username match (must be a different email)
                 return jsonify(message="User already exists."), 409
 
-            # Insert inactive user
+            # 3) No existing user → create new, inactive
             pwd_hash = generate_password_hash(password)
             cursor.execute(
                 "INSERT INTO users (username, email, password_hash, Active) "
@@ -65,40 +103,17 @@ def signup():
             user_id = cursor.lastrowid
             conn.commit()
 
-        # Generate activation token (valid 24h)
-        serializer = get_serializer()
-        token = serializer.dumps(
-            user_id,
-            salt=current_app.config['ACTIVATION_SALT']
-        )
-        frontend_host = current_app.config['FRONTEND_HOST']
-        activate_url = (
-            f"https://{frontend_host}/activate"
-            f"?token={token}"
-        )
-
-        # Send email
-        msg = Message(
-            subject="Activate Your Qurate-AI Account",
-            recipients=[email]
-        )
-        msg.html = render_template(
-            'activate_account_email.html',
-            username=username,
-            activate_url=activate_url
-        )
-        mail.send(msg)
-
+        # send fresh activation email
+        send_activation_email(user_id, email, username)
         return jsonify(message="User created. Activation email sent."), 201
 
-    except Exception as e:
+    except Exception:
         conn.rollback()
         current_app.logger.exception("Error in signup")
         return jsonify(error="Signup failed."), 500
 
     finally:
         conn.close()
-
 
 @auth_bp.route('/activate', methods=['GET'])
 def activate_account():
@@ -141,30 +156,44 @@ def activate_account():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json() or {}
-    username = data.get('username')
-    password = data.get('password')
+    # Allow login via username OR email
+    identifier = data.get('username') or data.get('email')
+    password   = data.get('password')
 
-    if not username or not password:
+    if not identifier or not password:
         return jsonify(message="Missing credentials."), 400
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT id, password_hash FROM users WHERE username=%s AND Active = 1", (username,)
+                """
+                SELECT id, password_hash
+                  FROM users
+                 WHERE (username = %s OR email = %s)
+                   AND Active = 1
+                """,
+                (identifier, identifier)
             )
             user = cursor.fetchone()
 
         if not user or not check_password_hash(user['password_hash'], password):
             return jsonify(message="Invalid credentials."), 401
 
-        access_token = create_access_token(identity=str(user['id']))
+        access_token  = create_access_token(identity=str(user['id']))
         refresh_token = create_refresh_token(identity=str(user['id']))
-        return jsonify(access_token=access_token, refresh_token=refresh_token), 200
+        return jsonify(
+            access_token=access_token,
+            refresh_token=refresh_token
+        ), 200
+
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        current_app.logger.exception("Error in login")
+        return jsonify(error="Login failed."), 500
+
     finally:
         conn.close()
+
 
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
