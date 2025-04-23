@@ -165,8 +165,8 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     next_field = pending_fields[0]
     # Use provided language if available; otherwise, default to "English"
     
-    last_10_conversations = list(collected_answers.items())[-10:]
-    context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_10_conversations])
+    last_n_conversations = list(collected_answers.items())[-20:]
+    context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_n_conversations])
     question_prompt = (
         f"Please generate a relevant and engaging question in {language_prompt} "
         f"(e.g., en-IN for English (Indian Accent), hi-IN for Hindi) that helps collect the field data: {next_field['field_name']}. "
@@ -189,9 +189,9 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     try:
         natural_question = llm.invoke(messages).content.strip()
         if ":" in natural_question:
-            natural_question = natural_question.split(":", 1)[1].strip().replace("`", "").replace("'", "").replace('"', "")
+            natural_question = natural_question.split(":", 1)[1].strip().replace("`", "").replace('"', "")
         else:
-            natural_question = natural_question.strip().replace("`", "").replace("'", "").replace('"', "")
+            natural_question = natural_question.strip().replace("`", "").replace('"', "")
         if greeting_message and not collected_answers:
             beep_message = ""
             # if audio:

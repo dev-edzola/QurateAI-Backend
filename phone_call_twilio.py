@@ -48,7 +48,7 @@ connected_clients = {}
 
 # Configuration for silence detection (in seconds)
 INITIAL_WAIT_TIMEOUT = 10  # Wait 10 seconds for user to start talking
-SILENCE_TIMEOUT = 3        # Wait 5 seconds of silence after user stops talking
+SILENCE_TIMEOUT = 3        # Wait 3 seconds of silence after user stops talking
 MIN_RMS_THRESHOLD = 10     # RMS threshold to detect speech
 MIN_AUDIO_BUFFER_LENGTH = 1000  # Minimum audio buffer size to process
 MAX_AUDIO_DURATION = 30  # Maximum seconds of audio to record before forcing processing
