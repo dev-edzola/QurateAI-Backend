@@ -183,7 +183,7 @@ def forget_password():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id FROM users WHERE email=%s", (email,))
+            cursor.execute("SELECT id FROM users WHERE email=%s AND Active = 1", (email,))
             user = cursor.fetchone()
 
         # Always respond 200 to avoid revealing whether the email exists
