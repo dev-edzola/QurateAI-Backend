@@ -40,7 +40,7 @@ app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=1)
 app.config['ACTIVATION_SALT']     = os.environ.get('ACTIVATION_SALT')
 app.config["PASSWORD_RESET_SALT"] = os.environ["PASSWORD_RESET_SALT"]
-
+app.config["FRONTEND_HOST"]  = os.environ.get('FRONTEND_HOST')
 
 jwt = JWTManager(app)
 configure_jwt_callbacks(jwt)

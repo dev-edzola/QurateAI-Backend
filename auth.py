@@ -17,6 +17,7 @@ from flask_mail import Message
 
 auth_bp = Blueprint('auth_bp', __name__)
 
+
 def configure_jwt_callbacks(jwt):
     @jwt.token_in_blocklist_loader
     def check_if_revoked(jwt_header, jwt_payload):
@@ -70,8 +71,9 @@ def signup():
             user_id,
             salt=current_app.config['ACTIVATION_SALT']
         )
+        frontend_host = current_app.config['FRONTEND_HOST']
         activate_url = (
-            "https://qurate-ai-frontend.onrender.com/activate"
+            f"https://{frontend_host}/activate"
             f"?token={token}"
         )
 
@@ -191,9 +193,9 @@ def forget_password():
                 user['id'],
                 salt=current_app.config['PASSWORD_RESET_SALT']
             )
-
+            frontend_host = current_app.config['FRONTEND_HOST']
             reset_url = (
-                "https://qurate-ai-frontend.onrender.com"
+                f"https://{frontend_host}"
                 f"/reset-password?reset_id={token}"
             )
 
