@@ -713,8 +713,8 @@ def make_call():
             cursor.execute("""
                 INSERT INTO communications 
                 (communication_type, form_fields_id, collected_answers, field_asked_counter, 
-                 language_info, field_parsed_answers, call_id, call_sid)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                 language_info, field_parsed_answers, call_id, call_sid, communication_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 "phone_call",
                 form_fields_id,
@@ -723,7 +723,8 @@ def make_call():
                 connected_clients[call_id]["language"],
                 json.dumps(connected_clients[call_id]["field_parsed_answers"]),
                 call_id,
-                call.sid
+                call.sid,
+                'Not Started'
             ))
             connection.commit()
             connected_clients[call_id]["communication_id"] = cursor.lastrowid
@@ -807,7 +808,16 @@ def voice():
             call_id=call_id,
             audio=True
         )
-       
+        communication_status = 'In Progress'
+        if field_id is None:
+            client_data["current_state"] = "complete"
+            communication_status = 'Completed'
+        else:
+            client_data["current_field"] = field_id
+            client_data["current_state"] = "asking"
+            client_data["field_asked_counter"][field_id] += 1
+            client_data["current_message"] = message
+
         if(client_data.get("communication_id")):
             
             connection = get_db_connection()
@@ -815,7 +825,7 @@ def voice():
                 with connection.cursor() as cursor:
                     update_sql = """
                         UPDATE communications 
-                        SET collected_answers = %s, field_asked_counter = %s, field_parsed_answers = %s, language_info = %s 
+                        SET collected_answers = %s, field_asked_counter = %s, field_parsed_answers = %s, language_info = %s, communication_status = %s 
                         WHERE communication_id = %s
                     """
                     cursor.execute(update_sql, (
@@ -823,6 +833,7 @@ def voice():
                         json.dumps(client_data["field_asked_counter"]),
                         json.dumps(client_data["field_parsed_answers"]),
                         client_data.get("language"),
+                        communication_status,
                         client_data.get("communication_id")
                     ))
                     connection.commit()
@@ -831,14 +842,7 @@ def voice():
                 return jsonify({"error": str(e)}), 500
             finally:
                 connection.close()
-        
-        if field_id is None:
-            client_data["current_state"] = "complete"
-        else:
-            client_data["current_field"] = field_id
-            client_data["current_state"] = "asking"
-            client_data["field_asked_counter"][field_id] += 1
-            client_data["current_message"] = message
+
     elif client_data["current_state"] == "complete":
         # Modified to just say thank you without asking for more
         message = generate_summary_response(client_data["field_parsed_answers"], client_data["form_fields"], llm, language=client_data.get("language"))

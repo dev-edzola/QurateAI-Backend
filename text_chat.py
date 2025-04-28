@@ -17,7 +17,7 @@ def collect():
     last_field_id = data.get("field_id")
     last_question = data.get("question")
     
-    if not form_fields_id:
+    if form_fields_id is None:
         return jsonify({"error": "Missing form_fields id"}), 400
     
 
@@ -43,8 +43,8 @@ def collect():
                 # Insert the new communication row.
                 insert_sql = """
                     INSERT INTO communications 
-                    (communication_type, form_fields_id, collected_answers, field_asked_counter, language_info, field_parsed_answers)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    (communication_type, form_fields_id, collected_answers, field_asked_counter, language_info, field_parsed_answers, communication_status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(insert_sql, (
                     "text_chat",
@@ -52,7 +52,8 @@ def collect():
                     json.dumps(collected_answers),
                     json.dumps(field_asked_counter),
                     language_info,
-                    json.dumps(field_parsed_answers)
+                    json.dumps(field_parsed_answers),
+                    'Not Started'
                 ))
                 connection.commit()
                 communication_id = cursor.lastrowid
@@ -104,7 +105,7 @@ def collect():
                 greeting_message=greeting,
                 audio=False
             )
-
+            communication_status = 'In Progress'
             # If there is no next field, finish the conversation.
             if next_field_id is None:
                 response_data = {
@@ -114,6 +115,7 @@ def collect():
                     "field_parsed_answers": field_parsed_answers,
                     "communication_id": communication_id
                 }
+                communication_status = 'Completed'
             else:
                 response_data = {
                     "form_fields_id": form_fields_id,
@@ -126,7 +128,7 @@ def collect():
             # Update the communication record with the new state.
             update_sql = """
                 UPDATE communications 
-                SET collected_answers = %s, field_asked_counter = %s, field_parsed_answers = %s, language_info = %s 
+                SET collected_answers = %s, field_asked_counter = %s, field_parsed_answers = %s, language_info = %s, communication_status = %s 
                 WHERE communication_id = %s
             """
             cursor.execute(update_sql, (
@@ -134,6 +136,7 @@ def collect():
                 json.dumps(field_asked_counter),
                 json.dumps(field_parsed_answers),
                 language_info,
+                communication_status,
                 communication_id
             ))
             connection.commit()
