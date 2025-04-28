@@ -820,6 +820,8 @@ def voice():
             form_context=client_data.get("form_context")
         )
         communication_status = 'In Progress'
+        if not client_data["collected_answers"]:
+            communication_status = 'Not Started'
         if field_id is None:
             client_data["current_state"] = "complete"
             communication_status = 'Completed'

@@ -100,7 +100,8 @@ def collect():
                 field_parsed_answers = parse_for_answers(
                 collected_answers=collected_answers,
                 form_fields=form_fields,
-                llm=llm
+                llm=llm,
+                form_context=form_context
                 )
             
             # For new conversations, you might want to send a greeting.
@@ -119,6 +120,8 @@ def collect():
                 form_context=form_context
             )
             communication_status = 'In Progress'
+            if not collected_answers:
+                communication_status = 'Not Started'
             # If there is no next field, finish the conversation.
             if next_field_id is None:
                 response_data = {
