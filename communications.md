@@ -1,102 +1,83 @@
-# Communications API Documentation
+# Communications Endpoint
 
-## Overview
-The Communications API allows authenticated users to retrieve records of their interactions (communications) including raw transcripts (`collected_answers`) and structured parsed responses (`field_parsed_answers`). Results are sorted by most recently updated.
+`GET /communications`
 
----
-
-## Authentication
-All endpoints require a valid JSON Web Token (JWT) in the `Authorization` header.
-
-```
-Authorization: Bearer <YOUR_JWT_TOKEN>
-```
-
-Requests without a valid token will receive a **401 Unauthorized** response.
+Retrieves a list of communications for the authenticated user, excluding those with status `Not Started`.
 
 ---
 
-## Base URL
-```
-https://{API_HOST}
-```
-Replace `{API_HOST}` with your server’s domain or IP.
+## Authorization
+
+| Header         | Value                      |
+|----------------|----------------------------|
+| Authorization  | `Bearer <access_token>`    |
 
 ---
 
-## Endpoints
+## Query Parameters
 
-### GET /communications
-Retrieve all communications for the current user, optionally filtered by form.
+| Parameter       | Type    | Required | Description                                      |
+|-----------------|---------|----------|--------------------------------------------------|
+| `form_fields_id`| integer | No       | Filter by a specific `form_fields_id`.           |
 
-#### Request
-```
-GET /communications?form_fields_id={form_fields_id}
-Host: {API_HOST}
-Authorization: Bearer <JWT>
-Accept: application/json
-```
+---
 
-- **Query Parameters**
-  - `form_fields_id` (optional, integer): If provided, only communications associated with this form will be returned. Omit to fetch all communications for the user.
+## Responses
 
-#### Response
-**Status Code**: `200 OK`
+### 200 OK
 
 ```json
 {
   "communications": [
     {
-      "communication_id": 123,
-      "form_fields_id": 45,
-      "collected_answers": { /* transcript text or JSON */ },
-      "field_parsed_answers": { /* parsed JSON responses */ },
-      "updated_at": "2025-04-21T12:34:56.789Z"
+      "communication_id": 1,
+      "communication_type": "call",
+      "form_fields_id": 42,
+      "collected_answers": { /* ... */ },
+      "field_parsed_answers": { /* ... */ },
+      "updated_at": "2025-04-28T17:52:11Z",
+      "communication_status": "In Progress"
     },
     {
-      "communication_id": 122,
-      "form_fields_id": 45,
-      "collected_answers": null,
-      "field_parsed_answers": {...},
-      "updated_at": "2025-04-20T11:22:33.444Z"
+      "communication_id": 2,
+      "communication_type": "sms",
+      "form_fields_id": 42,
+      "collected_answers": { /* ... */ },
+      "field_parsed_answers": { /* ... */ },
+      "updated_at": "2025-04-28T18:00:00Z",
+      "communication_status": "Completed"
     }
-    // … more records …
   ]
 }
 ```
 
-- **Fields**:
-  - `communication_id` (integer): Unique identifier of the communication record.
-  - `form_fields_id` (integer): ID of the form definition used.
-  - `collected_answers` (object|null): Raw transcript or text of the communication; may be JSON or plain text.
-  - `field_parsed_answers` (object|null): Structured JSON of parsed field responses.
-  - `updated_at` (string): ISO‑8601 timestamp of last update, sorted descending by default.
+### 500 Internal Server Error
 
-#### Error Responses
-
-| Status Code | Condition                              | Response Body                        |
-|-------------|----------------------------------------|--------------------------------------|
-| 400 Bad Request | Malformed query parameter (e.g., non-integer `form_fields_id`) | `{ "error": "..." }` |
-| 401 Unauthorized | Missing or invalid JWT              | `{ "msg": "Missing Authorization Header" }` |
-| 500 Internal Server Error | Database or server error       | `{ "error": "<error message>" }` |
+```json
+{
+  "error": "<error message>"
+}
+```
 
 ---
 
-## Examples
+## Implementation Details
 
-1. **Fetch all communications**
+- **Blueprint**: `communications_bp`
+- **Route**: `/communications` (GET)
+- **Authentication**: JWT via `@jwt_required()`
+- **Database**: MySQL
+  - **Table**: `communications` (alias `c`)
+  - **Join**: `form_fields` (alias `f`) on `c.form_fields_id = f.id`
+  - **Filters**:
+    - `f.user_id = get_jwt_identity()`
+    - `c.communication_status != 'Not Started'`
+    - Optional `c.form_fields_id = <form_fields_id>`
+  - **Ordering**: `c.updated_at DESC`
 
-   ```bash
-   curl -X GET "https://API_HOST/communications" \
-        -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-        -H "Accept: application/json"
-   ```
 
-2. **Fetch communications for form ID 42**
+### Utilities
 
-   ```bash
-   curl -X GET "https://API_HOST/communications?form_fields_id=42" \
-        -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-        -H "Accept: application/json"
-   ```
+- `_safe_json_load(value)` — Safely parse JSON strings into Python objects, returns `{}` if empty or invalid.
+- `_format_datetime(dt)` — Convert `datetime` object to ISO 8601 string.
 

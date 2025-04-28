@@ -22,11 +22,12 @@ def list_communications():
                   c.form_fields_id,
                   c.collected_answers,
                   c.field_parsed_answers,
-                  c.updated_at
+                  c.updated_at,
+                  c.communication_status
                 FROM communications AS c
                 LEFT JOIN form_fields   AS f
                   ON c.form_fields_id = f.id AND f.user_id IS NOT NULL
-                WHERE f.user_id = %s AND f.user_id IS NOT NULL
+                WHERE f.user_id = %s AND f.user_id IS NOT NULL AND c.communication_status != 'Not Started'
             """
             params = [current_user_id]
 
@@ -50,7 +51,8 @@ def list_communications():
                 "form_fields_id":       r["form_fields_id"],
                 "collected_answers":    _safe_json_load(r["collected_answers"]),
                 "field_parsed_answers": _safe_json_load(r["field_parsed_answers"]),
-                "updated_at":           _format_datetime(r["updated_at"])
+                "updated_at":           _format_datetime(r["updated_at"]),
+                "communication_status": r["communication_status"]
             })
 
         return jsonify({"communications": communications}), 200
