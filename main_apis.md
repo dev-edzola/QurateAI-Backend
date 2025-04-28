@@ -78,8 +78,32 @@
 
 ---
 
+### 3.1. `GET /all_forms`
+**Description:** Retrieves all form field configurations.
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "form_field_name": "Demo",
+    "form_fields": [...],
+    ...
+  }
+]
+```
+
+**Error Codes:** 500 (DB Error)
+
+---
+
+
+
 ### 4. `GET /forms/<form_id>`
-**Description:** Retrieves a specific active form field configuration by ID.
+**Description:** Retrieves a specific form field configuration by ID.
 
 **Headers:**
 - `Authorization: Bearer <access_token>`
