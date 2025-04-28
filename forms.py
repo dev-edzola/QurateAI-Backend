@@ -21,7 +21,7 @@ def generate_form_fields():
     data = request.get_json()
     user_query = data.get("user_query")
     form_field_name = data.get("form_field_name")
-
+    form_context = data.get("form_context")
     if not user_query:
         return jsonify({"error": "Missing user_query"}), 400
     if not form_field_name:
@@ -55,12 +55,13 @@ def generate_form_fields():
                 return jsonify({"error": "No form fields generated"}), 400
             insert_sql = """
                 INSERT INTO QURATE_AI.form_fields
-                    (user_id, form_field_name, form_fields)
-                VALUES (%s, %s, %s)
+                    (user_id, form_field_name, form_context, form_fields)
+                VALUES (%s, %s, %s, %s)
             """
             cursor.execute(insert_sql,
                            (current_user_id,
                             form_field_name,
+                            form_context,
                             json.dumps(form_fields)))
             connection.commit()
             new_id = cursor.lastrowid
@@ -88,7 +89,7 @@ def get_active_forms():
     try:
         with connection.cursor() as cursor:
             sql = (
-                "SELECT * FROM QURATE_AI.form_fields "
+                "SELECT id, form_field_name, form_fields, is_active, created_at, updated_at FROM QURATE_AI.form_fields "
                 "WHERE user_id IS NOT NULL AND user_id = %s AND is_active = 1 "
                 "ORDER BY updated_at DESC"
             )
@@ -108,7 +109,7 @@ def get_all_forms():
     try:
         with connection.cursor() as cursor:
             sql = (
-                "SELECT * FROM QURATE_AI.form_fields "
+                "SELECT id, form_field_name, form_fields, is_active, created_at, updated_at FROM QURATE_AI.form_fields "
                 "WHERE user_id IS NOT NULL AND user_id = %s"
                 "ORDER BY updated_at DESC"
             )
@@ -129,7 +130,7 @@ def get_specific_form(form_id):
     try:
         with connection.cursor() as cursor:
             sql = (
-                "SELECT * FROM QURATE_AI.form_fields "
+                "SELECT id, form_field_name, form_fields, is_active, created_at, updated_at, form_context FROM QURATE_AI.form_fields "
                 "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s"
             )
             cursor.execute(sql, (form_id, current_user_id))
@@ -162,6 +163,9 @@ def update_form(form_id):
     if "is_active" in data:
         update_fields.append("is_active = %s")
         values.append(data["is_active"])
+    if "form_context" in data:
+        update_fields.append("form_context = %s")
+        values.append(json.dumps(data["form_context"]))    
 
     if not update_fields:
         return jsonify({"error": "No valid fields provided for update"}), 400

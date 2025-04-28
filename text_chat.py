@@ -20,19 +20,25 @@ def collect():
     if form_fields_id is None:
         return jsonify({"error": "Missing form_fields id"}), 400
     
-
+    form_context = ''
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
             # If no communication_id, create a new communication row.
             if not communication_id:
                 # First, fetch the form_fields from the form_fields table.
-                sql = "SELECT form_fields FROM form_fields WHERE id = %s and is_active = 1"
-                cursor.execute(sql, (form_fields_id,))
+                cursor.execute("""
+                    SELECT form_fields, form_context
+                    FROM form_fields
+                    WHERE id = %s AND is_active = 1
+                """, (form_fields_id,))
                 result = cursor.fetchone()
+
                 if not result:
                     return jsonify({"error": "Invalid form_fields id"}), 400
-                form_fields = json.loads(result["form_fields"])
+                form_fields  = json.loads(result["form_fields"])
+                form_context = result["form_context"] if result["form_context"] is not None else ''
+
 
                 # Initialize communication state.
                 collected_answers = OrderedDict()
@@ -67,12 +73,18 @@ def collect():
                     return jsonify({"error": "Invalid communication_id"}), 400
 
                 # Retrieve the form_fields from the form_fields table using the stored form_fields_id.
-                sql = "SELECT form_fields FROM form_fields WHERE id = %s"
-                cursor.execute(sql, (comm["form_fields_id"],))
+                cursor.execute("""
+                    SELECT form_fields, form_context
+                    FROM form_fields
+                    WHERE id = %s AND is_active = 1
+                """, (form_fields_id,))
                 result = cursor.fetchone()
+
                 if not result:
-                    return jsonify({"error": "Invalid form_fields id in communication"}), 400
-                form_fields = json.loads(result["form_fields"])
+                    return jsonify({"error": "Invalid form_fields id"}), 400
+                form_fields  = json.loads(result["form_fields"])
+                form_context = result["form_context"] if result["form_context"] is not None else ''
+
 
                 collected_answers = json.loads(comm["collected_answers"], object_pairs_hook=OrderedDict) if comm["collected_answers"] else {}
                 field_asked_counter = json.loads(comm["field_asked_counter"]) if comm["field_asked_counter"] else {}
@@ -103,7 +115,8 @@ def collect():
                 llm=llm,
                 language=language_info,
                 greeting_message=greeting,
-                audio=False
+                audio=False,
+                form_context=form_context
             )
             communication_status = 'In Progress'
             # If there is no next field, finish the conversation.

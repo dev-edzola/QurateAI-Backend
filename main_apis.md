@@ -25,12 +25,14 @@
 }
 ```
 
-**Error Codes:** 400 (Missing phone number or form ID), 500 (Twilio error)
+**Error Codes:**  
+- `400` – Missing phone number or form ID  
+- `500` – Twilio error  
 
 ---
 
 ### 2. `POST /generate_form_fields`
-**Description:** Generates and stores form fields based on a user query.
+**Description:** Generates LLM-driven form fields from a user query and stores them.
 
 **Headers:**
 - `Authorization: Bearer <access_token>`
@@ -38,158 +40,199 @@
 **Request Body:**
 ```json
 {
-  "user_query": "Book a meeting with a dentist",
-  "form_field_name": "Dental Meeting"
+  "user_query": "Book a meeting with a dentist",     // required: text to parse
+  "form_field_name": "Dental Meeting",               // required: unique name for this form
+  "form_context": { ... }                            // optional: any JSON context you want saved
 }
 ```
 
-**Response:**
+**Response:** `201 Created`
 ```json
 {
   "form_link": "https://{host}/chat?form_fields_id=13",
   "form_fields_id": 13,
-  "form_fields": [ ... ]
+  "form_fields": [
+    {
+      "id": "date",
+      "label": "Appointment Date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "id": "time",
+      "label": "Appointment Time",
+      "type": "time",
+      "required": true
+    },
+    ...
+  ]
 }
 ```
 
-**Error Codes:** 400 (Missing input), 409 (Duplicate form), 500 (DB Error)
+**Error Codes:**  
+- `400` – Missing `user_query` or `form_field_name`, or no fields generated  
+- `409` – A form with this name already exists (returns `form_fields_id`)  
+- `500` – Database or LLM error  
 
 ---
 
 ### 3. `GET /forms`
-**Description:** Retrieves all active form field configurations.
+**Description:** List all **active** form configurations for the current user, ordered by most recent update.
 
 **Headers:**
 - `Authorization: Bearer <access_token>`
 
-**Response:**
+**Response:** `200 OK`
 ```json
 [
   {
-    "id": 1,
-    "form_field_name": "Demo",
-    "form_fields": [...],
-    ...
-  }
+    "id": 13,
+    "form_field_name": "Dental Meeting",
+    "form_fields": [ ... ],
+    "is_active": 1,
+    "created_at": "2025-04-27T12:34:56Z",
+    "updated_at": "2025-04-28T09:10:11Z"
+  },
+  ...
 ]
 ```
 
-**Error Codes:** 500 (DB Error)
+**Error Codes:**  
+- `500` – Database error  
 
 ---
 
-### 3.1. `GET /all_forms`
-**Description:** Retrieves all form field configurations.
+### 4. `GET /all_forms`
+**Description:** List **all** form configurations (active and inactive) for the current user, ordered by most recent update.
 
 **Headers:**
 - `Authorization: Bearer <access_token>`
 
-**Response:**
+**Response:** `200 OK`
 ```json
 [
   {
-    "id": 1,
-    "form_field_name": "Demo",
-    "form_fields": [...],
-    ...
-  }
+    "id": 11,
+    "form_field_name": "Old Survey",
+    "form_fields": [ ... ],
+    "is_active": 0,
+    "created_at": "2025-03-15T08:00:00Z",
+    "updated_at": "2025-04-10T14:22:33Z"
+  },
+  ...
 ]
 ```
 
-**Error Codes:** 500 (DB Error)
+**Error Codes:**  
+- `500` – Database error  
 
 ---
 
-
-
-### 4. `GET /forms/<form_id>`
-**Description:** Retrieves a specific form field configuration by ID.
+### 5. `GET /forms/<form_id>`
+**Description:** Retrieve a specific form configuration by its ID.
 
 **Headers:**
 - `Authorization: Bearer <access_token>`
 
-**Response:**
+**Response:** `200 OK`
 ```json
 {
-  "id": 1,
-  "form_field_name": "Demo",
-  "form_fields": [...]
-}
-```
-
-**Error Codes:** 404 (Not found), 500 (DB Error)
-
----
-
-### 5. `PATCH /forms/<form_id>`
-**Description:** Updates specific fields of a form field configuration.
-
-**Headers:**
-- `Authorization: Bearer <access_token>`
-
-**Request Body (any subset):**
-```json
-{
-  "form_field_name": "Updated Name",
+  "id": 13,
+  "form_field_name": "Dental Meeting",
+  "form_context": { ... },
   "form_fields": [ ... ],
-  "is_active": true
+  "is_active": 1,
+  "created_at": "2025-04-27T12:34:56Z",
+  "updated_at": "2025-04-28T09:10:11Z"
 }
 ```
 
-**Response:**
+**Error Codes:**  
+- `404` – Form not found or inactive  
+- `500` – Database error  
+
+---
+
+### 6. `PATCH /forms/<form_id>`
+**Description:** Update one or more properties of a form configuration.
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
+**Request Body:** (any subset of fields below)
+```json
+{
+  "form_field_name": "Updated Name",    // optional
+  "form_context": { ... },              // optional
+  "form_fields": [ ... ],               // optional: full new fields array
+  "is_active": 0                        // optional: 1 = active, 0 = inactive
+}
+```
+
+**Response:** `200 OK`
 ```json
 {
   "message": "Form updated successfully."
 }
 ```
 
-**Error Codes:** 400 (Invalid input), 500 (DB Error)
+**Error Codes:**  
+- `400` – No valid fields provided  
+- `404` – Form not found or no permission  
+- `500` – Database error  
 
 ---
 
-### 6. `DELETE /forms/<form_id>`
-**Description:** Soft deletes (deactivates) a form configuration.
+### 7. `DELETE /forms/<form_id>`
+**Description:** Soft-delete (deactivate) a form configuration.
 
 **Headers:**
 - `Authorization: Bearer <access_token>`
 
-**Response:**
+**Response:** `200 OK`
 ```json
 {
   "message": "Form marked as inactive."
 }
 ```
 
-**Error Codes:** 500 (DB Error)
+**Error Codes:**  
+- `404` – Form not found or no permission  
+- `500` – Database error  
 
 ---
 
-### 7. `POST /collect`
-**Description:** Handles a conversational interaction by collecting answers to dynamic form fields and advancing the chat.
+### 8. `POST /collect`
+**Description:** Continue a conversational flow by sending a user’s answer to a specific form field and receiving the next prompt.
 
-**Authentication:** None (assumes public)
+**Authentication:** None
 
 **Request Body:**
 ```json
 {
   "form_fields_id": 3,
   "communication_id": 45,
-  "answer": "Tomorrow at 4 PM",
   "field_id": "date",
-  "question": "When do you want to schedule it?"
+  "question": "When do you want to schedule it?",
+  "answer": "Tomorrow at 4 PM"
 }
 ```
 
-**Response:**
+**Response:** `200 OK`
 ```json
 {
   "form_fields_id": 3,
-  "message": "What is your name?",
+  "communication_id": 45,
   "field_id": "name",
-  "field_parsed_answers": { ... },
-  "communication_id": 45
+  "question": "What is your name?",
+  "field_parsed_answers": {
+    "date": "2025-04-29",
+    "time": "16:00"
+  }
 }
 ```
 
-**Error Codes:** 400 (Missing ID or bad data), 500 (DB Error)
-
+**Error Codes:**  
+- `400` – Missing ID or malformed data  
+- `500` – Database error  
+```

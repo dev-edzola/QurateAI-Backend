@@ -442,7 +442,8 @@ def process_user_audio(call_id, call_sid, session_id):
                         parsed_data = parse_for_answers(
                             client_data["collected_answers"],
                             client_data["form_fields"],
-                            llm=llm
+                            llm=llm,
+                            form_context=client_data.get("form_context", "")
                         )
                         client_data["field_parsed_answers"] = parsed_data
                 except Exception as e:
@@ -652,7 +653,7 @@ def make_call():
     if request.is_json:
         data = request.get_json()
     to_number = request.form.get('to') or data.get('to')
-    user_query = request.form.get('query') or data.get('query')
+    # user_query = request.form.get('query') or data.get('query')
     form_fields_id = request.form.get("form_fields_id") or data.get("form_fields_id")
 
     if not to_number:
@@ -663,20 +664,28 @@ def make_call():
     try:
         with connection.cursor() as cursor:
             if form_fields_id:
-                cursor.execute("SELECT form_fields FROM form_fields WHERE id = %s and is_active = 1", (form_fields_id,))
+                cursor.execute("""
+                    SELECT form_fields, form_context
+                    FROM form_fields
+                    WHERE id = %s AND is_active = 1
+                """, (form_fields_id,))
                 result = cursor.fetchone()
+
                 if not result:
                     return jsonify({"error": "Invalid form_fields id"}), 400
-                form_fields = json.loads(result["form_fields"])
-            elif user_query:
-                try:
-                    form_fields_data = parse_for_form_fields(user_query, llm)
-                    form_fields = form_fields_data.get('fields', [])
-                    if not form_fields:
-                        raise ValueError("No form fields generated")
-                except Exception as e:
-                    logger.error(f"Error parsing form fields from query: {e}")
-                    form_fields = get_default_form_fields()
+
+                # 2. JSON-decode both
+                form_fields  = json.loads(result["form_fields"])
+                form_context = result["form_context"] if result["form_context"] is not None else ''
+            # elif user_query:
+            #     try:
+            #         form_fields_data = parse_for_form_fields(user_query, llm)
+            #         form_fields = form_fields_data.get('fields', [])
+            #         if not form_fields:
+            #             raise ValueError("No form fields generated")
+            #     except Exception as e:
+            #         logger.error(f"Error parsing form fields from query: {e}")
+            #         form_fields = get_default_form_fields()
             else:
                 form_fields = get_default_form_fields()
 
@@ -700,6 +709,7 @@ def make_call():
                 "max_wait_time": INITIAL_WAIT_TIMEOUT,
                 "silence_timeout": SILENCE_TIMEOUT,
                 "audio_session_id": 0,
+                "form_context": form_context,
             }
 
             logger.info(f"Generated form fields for call {call_id}: {json.dumps(form_fields)}")
@@ -806,7 +816,8 @@ def voice():
             client_data.get("language"),
             client_data.get("greeting_message") if client_data["current_state"] == "initial" else None,
             call_id=call_id,
-            audio=True
+            audio=True,
+            form_context=client_data.get("form_context")
         )
         communication_status = 'In Progress'
         if field_id is None:

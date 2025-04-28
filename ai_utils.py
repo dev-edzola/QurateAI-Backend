@@ -40,13 +40,14 @@ def extract_json(response_text):
         return {}
 
 
-def parse_for_answers(collected_answers, form_fields, llm):
+def parse_for_answers(collected_answers, form_fields, llm, form_context=''):
     """Parse collected answers to extract structured data"""
     field_instructions = "\n".join([
         f"{field['field_id']}: {field['additional_info']} (Type: {field['datatype']})"
         for field in form_fields
     ])
     final_prompt = (
+        f"form_context: {form_context}. "
         f"Given the collected conversation: {collected_answers},\n"
         f"and the field instructions:\n{field_instructions}\n\n"
         f"and the today's date: {date.today()}\n\n"
@@ -142,7 +143,7 @@ def generate_summary_response(field_parsed_answers, form_fields, llm, language="
 
 
 
-def get_next_question(form_fields, collected_answers, field_parsed_answers, field_asked_counter, llm, language="en-GB", greeting_message=None, call_id=None, audio = True):
+def get_next_question(form_fields, collected_answers, field_parsed_answers, field_asked_counter, llm, language="en-GB", greeting_message=None, call_id=None, audio = True, form_context=''):
     """Generate the next question based on collected answers and question attempts"""
     pending_fields = [
         field for field in form_fields 
@@ -168,6 +169,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     last_n_conversations = list(collected_answers.items())[-20:]
     context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_n_conversations])
     question_prompt = (
+        f'Context: {form_context}. '
         f"Please generate a relevant and engaging question in {language_prompt} "
         f"(e.g., en-IN for English (Indian Accent), hi-IN for Hindi) that helps collect the field data: {next_field['field_name']}. "
         f"Background: {next_field['additional_info']}. "
