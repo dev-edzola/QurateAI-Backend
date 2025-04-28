@@ -82,7 +82,7 @@ def generate_form_fields():
 
 @form_bp.route('/forms', methods=['GET'])
 @jwt_required()
-def get_forms():
+def get_active_forms():
     current_user_id = get_jwt_identity()
     connection = get_db_connection()
     try:
@@ -100,6 +100,26 @@ def get_forms():
     finally:
         connection.close()
 
+@form_bp.route('/all_forms', methods=['GET'])
+@jwt_required()
+def get_all_forms():
+    current_user_id = get_jwt_identity()
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = (
+                "SELECT * FROM QURATE_AI.form_fields "
+                "WHERE user_id IS NOT NULL AND user_id = %s"
+                "ORDER BY updated_at DESC"
+            )
+            cursor.execute(sql, (current_user_id,))
+            forms = cursor.fetchall()
+        return jsonify(forms), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        connection.close()        
+
 
 @form_bp.route('/forms/<int:form_id>', methods=['GET'])
 @jwt_required()
@@ -110,7 +130,7 @@ def get_specific_form(form_id):
         with connection.cursor() as cursor:
             sql = (
                 "SELECT * FROM QURATE_AI.form_fields "
-                "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s AND is_active = 1"
+                "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s"
             )
             cursor.execute(sql, (form_id, current_user_id))
             form = cursor.fetchone()
@@ -149,7 +169,7 @@ def update_form(form_id):
     update_clause = ", ".join(update_fields)
     sql = (
         f"UPDATE QURATE_AI.form_fields SET {update_clause} "
-        "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s AND is_active = 1"
+        "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s"
     )
     values.extend([form_id, current_user_id])
 

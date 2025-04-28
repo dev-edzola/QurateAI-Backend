@@ -25,7 +25,7 @@ def list_communications():
                   c.updated_at
                 FROM communications AS c
                 LEFT JOIN form_fields   AS f
-                  ON c.form_fields_id = f.id AND f.is_active = 1 AND f.user_id IS NOT NULL
+                  ON c.form_fields_id = f.id AND f.user_id IS NOT NULL
                 WHERE f.user_id = %s AND f.user_id IS NOT NULL
             """
             params = [current_user_id]

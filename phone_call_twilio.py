@@ -663,7 +663,7 @@ def make_call():
     try:
         with connection.cursor() as cursor:
             if form_fields_id:
-                cursor.execute("SELECT form_fields FROM form_fields WHERE id = %s", (form_fields_id,))
+                cursor.execute("SELECT form_fields FROM form_fields WHERE id = %s and is_active = 1", (form_fields_id,))
                 result = cursor.fetchone()
                 if not result:
                     return jsonify({"error": "Invalid form_fields id"}), 400
