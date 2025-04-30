@@ -19,7 +19,7 @@ from collections import OrderedDict
 from flask_jwt_extended import jwt_required
 from file_management import AUDIO_DIR, TRANSCRIPTION_AUDIO_DIR, cleanup_call_audio_files, delete_stale_files
 from db_management import get_db_connection
-from ai_utils import llm, parse_for_answers, generate_summary_response, get_next_question, parse_for_form_fields, get_default_form_fields
+from ai_utils import llm, llm_reasoning, parse_for_answers, generate_summary_response, get_next_question, get_default_form_fields
 from common_utils import proper_language_code, transcribe_audio
 
 phone_call_twilio_bp = Blueprint('phone_call_twilio_bp', __name__)
@@ -439,13 +439,16 @@ def process_user_audio(call_id, call_sid, session_id):
                 # Update the current field's parsed answer if we're in asking state
                
                 try:
-                        parsed_data = parse_for_answers(
+                        parsed_data, next_field_id_to_be_asked, additional_context_next_question = parse_for_answers(
                             client_data["collected_answers"],
                             client_data["form_fields"],
-                            llm=llm,
-                            form_context=client_data.get("form_context", "")
+                            llm=llm_reasoning,
+                            form_context=client_data.get("form_context", ""),
+                            field_parsed_answers=client_data.get("field_parsed_answers", {})
                         )
                         client_data["field_parsed_answers"] = parsed_data
+                        client_data["next_field_id_to_be_asked"] = next_field_id_to_be_asked
+                        client_data["additional_context_next_question"] = additional_context_next_question
                 except Exception as e:
                     logger.error(f"Error parsing answers: {e}")
                     
@@ -710,6 +713,8 @@ def make_call():
                 "silence_timeout": SILENCE_TIMEOUT,
                 "audio_session_id": 0,
                 "form_context": form_context,
+                "next_field_id_to_be_asked": None,
+                "additional_context_next_question": None
             }
 
             logger.info(f"Generated form fields for call {call_id}: {json.dumps(form_fields)}")
@@ -817,7 +822,9 @@ def voice():
             client_data.get("greeting_message") if client_data["current_state"] == "initial" else None,
             call_id=call_id,
             audio=True,
-            form_context=client_data.get("form_context")
+            form_context=client_data.get("form_context"),
+            next_field_id=client_data.get("next_field_id_to_be_asked"),
+            additional_context_next_question=client_data.get("additional_context_next_question")
         )
         communication_status = 'In Progress'
         if not client_data["collected_answers"]:

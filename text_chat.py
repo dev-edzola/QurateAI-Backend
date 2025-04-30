@@ -2,7 +2,7 @@ import json
 from flask import Blueprint, request, jsonify
 
 from db_management import get_db_connection
-from ai_utils import llm, parse_for_answers, get_next_question
+from ai_utils import llm, llm_reasoning, parse_for_answers, get_next_question
 from collections import OrderedDict
 
 
@@ -91,17 +91,18 @@ def collect():
                 field_parsed_answers = json.loads(comm["field_parsed_answers"]) if comm["field_parsed_answers"] else {}
                 language_info = field_parsed_answers.get('language') if field_parsed_answers.get('language') else "en-IN"
                 start_conversation = False
-
+            next_field_id_to_be_asked, additional_context_next_question = None, None
             # If an answer and its field_id are provided, update state.
             if last_answer and last_field_id and last_question:
                 # (You can modify the key used to index collected answers as needed.)
                 collected_answers[last_question] = last_answer
                 field_asked_counter[last_field_id] = field_asked_counter.get(last_field_id, 0) + 1
-                field_parsed_answers = parse_for_answers(
+                field_parsed_answers, next_field_id_to_be_asked, additional_context_next_question = parse_for_answers(
                 collected_answers=collected_answers,
                 form_fields=form_fields,
-                llm=llm,
-                form_context=form_context
+                llm=llm_reasoning,
+                form_context=form_context,
+                field_parsed_answers=field_parsed_answers
                 )
             
             # For new conversations, you might want to send a greeting.
@@ -117,7 +118,9 @@ def collect():
                 language=language_info,
                 greeting_message=greeting,
                 audio=False,
-                form_context=form_context
+                form_context=form_context,
+                next_field_id=next_field_id_to_be_asked,
+                additional_context_next_question=additional_context_next_question
             )
             communication_status = 'In Progress'
             if not collected_answers:

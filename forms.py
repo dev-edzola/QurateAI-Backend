@@ -7,9 +7,9 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
 )
-from ai_utils import select_llm, parse_for_form_fields
+from ai_utils import llm_reasoning, parse_for_form_fields
 
-llm = select_llm(model_name="gpt-4.1-mini", provider="open_ai")
+
 frontend_host = os.environ.get('FRONTEND_HOST')
 
 form_bp = Blueprint('form_bp', __name__)
@@ -50,7 +50,7 @@ def generate_form_fields():
 
             # 3) Otherwise insert new
             # Generate the fields via your LLM helper
-            form_fields = parse_for_form_fields(user_query, llm).get("fields", [])
+            form_fields = parse_for_form_fields(user_query, llm_reasoning, form_context=form_context).get("fields", [])
             if not form_fields:
                 return jsonify({"error": "No form fields generated"}), 400
             insert_sql = """

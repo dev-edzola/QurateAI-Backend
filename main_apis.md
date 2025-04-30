@@ -53,16 +53,18 @@
   "form_fields_id": 13,
   "form_fields": [
     {
-      "id": "date",
-      "label": "Appointment Date",
-      "type": "date",
-      "required": true
+      {
+        "field_id": "language",
+        "field_name": "Language",
+        "datatype": "string",
+        "additional_info": "This question is asked so that further communication can happen in that language",
+        "validation": "Input must be the name of an Indian language (including English); anything else is invalid",
+        "additional_parsing_comments": "Map the user's input (e.g. English, Hindi, Marathi) to its BCP 47 tag (en-IN, hi-IN, mr-IN). Reject non-Indian languages (e.g. Spanish).",
+        "condition_for_asking_this_field": null
+                
     },
     {
-      "id": "time",
-      "label": "Appointment Time",
-      "type": "time",
-      "required": true
+      ...
     },
     ...
   ]
