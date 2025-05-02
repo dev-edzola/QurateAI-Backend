@@ -202,7 +202,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         f'Use simple, conversational phrasing—avoid formal or dictionary-style language. '
         f'If the target language is a local Indian language (like hi-IN, mr-IN, ta-IN), '
         f'weave in common English words or short phrases to improve clarity. '
-        f'Provide only the question itself, formatted as a {next_field["datatype"]}, with no extra commentary. '
+        f'Provide only the question itself, with no extra commentary. '
         f'This is attempt {field_asked_counter.get(next_field["field_id"], 0) + 1} for this field. '
         f'If this is not the first attempt, try a different approach. '
         f'Here is our recent conversation context: {context or "No previous context"}. '
