@@ -174,7 +174,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
             if field_asked_counter.get(field["field_id"], 0) < 3 and 
             (field_parsed_answers.get(field["field_id"]) is None or field_parsed_answers.get(field["field_id"]) == "")
         ]
-
+    
 
     language_prompt = language if language != None and not language.lower().startswith('en') else "English"
 
@@ -192,18 +192,22 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     
     last_n_conversations = list(collected_answers.items())[-20:]
     context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_n_conversations])
+    current_attempt = field_asked_counter.get(next_field["field_id"], 0) + 1
+    feedback_instruction = ""
+    if current_attempt > 1 and additional_context_next_question:
+        feedback_instruction = f'Instructions for asking this question: {additional_context_next_question}. '
     question_prompt = (
         f'Context: {form_context}. '
         f'Please generate a relevant and engaging question in {language_prompt} '
         f'(e.g., en-IN for English (Indian Accent), hi-IN for Hindi). '
         f'This question should help collect the field data: {next_field["field_name"]}. '
-        f'Instructions for asking this question: {additional_context_next_question}. '
+        f'{feedback_instruction}'
         f'Background: {next_field["additional_info"]}. '
         f'Use simple, conversational phrasing—avoid formal or dictionary-style language. '
         f'If the target language is a local Indian language (like hi-IN, mr-IN, ta-IN), '
         f'weave in common English words or short phrases to improve clarity. '
         f'Provide only the question itself, with no extra commentary. '
-        f'This is attempt {field_asked_counter.get(next_field["field_id"], 0) + 1} for this field. '
+        f'This is attempt {current_attempt} for this field. '
         f'If this is not the first attempt, try a different approach. '
         f'Here is our recent conversation context: {context or "No previous context"}. '
         f'Remember that we have already collected some answers: {field_parsed_answers}. '
@@ -211,7 +215,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         'Feel free to ask follow-up questions or seek clarification if previous responses were unclear. '
         'Tone: Show compassion and warmth in your question.'
     ).strip()
-
+    # print(f"\n[Debug] Question prompt: {question_prompt}")
  
     messages = [
         SystemMessage(content="You are a conversational human that frames questions naturally. "
