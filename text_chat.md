@@ -135,7 +135,7 @@ curl -X PATCH https://api.example.com/api/text-chat/communication/metadata \
   -d '{
         "form_fields_id": 42,
         "communication_type": "text_chat",
-        "callback_url": "https://webhook.site/abcd1234"
+        "communication_context": "<context>"
       }'
 ```
 
