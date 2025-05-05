@@ -23,6 +23,7 @@ from forms import form_bp
 from text_chat import text_chat_bp
 from phone_call_twilio import phone_call_twilio_bp
 from communications import communications_bp
+from edzola_hiring import resume_bp
 import datetime
 from auth import configure_jwt_callbacks
 from flask_jwt_extended import JWTManager
@@ -49,6 +50,7 @@ app.register_blueprint(form_bp)
 app.register_blueprint(text_chat_bp)
 app.register_blueprint(phone_call_twilio_bp) 
 app.register_blueprint(communications_bp)
+app.register_blueprint(resume_bp)
 
 app.config["DEBUG"] = False
 app.config["ENV"] = "production"

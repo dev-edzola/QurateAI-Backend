@@ -24,6 +24,7 @@ def select_llm(model_name="gpt-4o-mini", provider="open_ai"):
         return ChatOpenAI(openai_api_key=OPENAI_API_KEY, temperature=0.7, model_name=model_name)
 llm = select_llm()
 llm_reasoning = select_llm(model_name="gpt-4.1-mini", provider="open_ai")
+
 def extract_json(response_text):
     """Extract JSON from LLM response"""
     import re
@@ -42,14 +43,14 @@ def extract_json(response_text):
 
 def parse_for_answers(collected_answers, form_fields, llm, form_context='', field_parsed_answers=None, communication_context=None ):
     # current_field = last field of field_parsed_answers
-    user_info = f"User Info: {communication_context}" if communication_context else ""
+    user_info = f"[User Info: {communication_context}]" if communication_context else ""
     current_field = 'No field answered yet'
     if field_parsed_answers:
         current_field = list(field_parsed_answers.keys())[-1] if field_parsed_answers else 'No field answered yet'
     """Parse collected answers to extract structured data and decide next field to ask"""
     final_prompt = (
         f"[form_context: {form_context}.] "
-        f"[{user_info}]"
+        f"{user_info}"
         f"Field parsed answers (till now): {field_parsed_answers}\n"
         f"Collected conversation (generated via STT from a phone call; may include disfluencies or transcription errors): {collected_answers}\n"
         f"Field instructions: {form_fields}\n"
@@ -192,7 +193,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     next_field = pending_fields[0]
     # Use provided language if available; otherwise, default to "English"
     
-    user_info = f"User Info: {communication_context}" if communication_context else ""
+    user_info = f"[User Info: {communication_context}]" if communication_context else ""
 
     last_n_conversations = list(collected_answers.items())[-20:]
     context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_n_conversations])
