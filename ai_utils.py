@@ -69,7 +69,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         "  \"next_field_id\": \"email\",\n"
         "  \"additional_context\": \"Ask the user for their email address in clear, simple language.\"\n"
         "}"
-    ).trim()
+    ).strip()
 
     messages = [
         SystemMessage(content="You are an assistant that extracts structured information from text and plans the next question."),
@@ -210,7 +210,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         f"Today's date: {date.today()}. Note: today's date is included for additional context."
         'Feel free to ask follow-up questions or seek clarification if previous responses were unclear. '
         'Tone: Show compassion and warmth in your question.'
-    ).trim()
+    ).strip()
 
  
     messages = [
