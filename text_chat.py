@@ -16,7 +16,7 @@ def collect():
     last_answer = data.get("answer")
     last_field_id = data.get("field_id")
     last_question = data.get("question")
-    
+    reset = data.get("reset", False)
     if form_fields_id is None:
         return jsonify({"error": "Missing form_fields id"}), 400
     
@@ -25,7 +25,49 @@ def collect():
     try:
         with connection.cursor() as cursor:
             # If no communication_id, create a new communication row.
-            if not communication_id:
+            if reset and communication_id:
+                cursor.execute("""
+                    SELECT form_fields, form_context
+                    FROM form_fields
+                    WHERE id = %s AND is_active = 1
+                """, (form_fields_id,))
+                result = cursor.fetchone()
+
+                if not result:
+                    return jsonify({"error": "Invalid form_fields id"}), 400
+                form_fields  = json.loads(result["form_fields"])
+                form_context = result["form_context"] if result["form_context"] is not None else ''
+
+
+                # Initialize communication state.
+                collected_answers = OrderedDict()
+                field_asked_counter = {field["field_id"]: 0 for field in form_fields}
+                field_parsed_answers = {field["field_id"]: None for field in form_fields}
+                language_info = "en-IN"  # default language
+                # Update the existing communication row.
+                update_sql = """
+                    UPDATE communications
+                    SET
+                        form_fields_id = %s,
+                        collected_answers = %s,
+                        field_asked_counter = %s,
+                        language_info = %s,
+                        field_parsed_answers = %s,
+                        communication_status = %s
+                    WHERE id = %s
+                """
+                cursor.execute(update_sql, (
+                    form_fields_id,
+                    json.dumps(collected_answers),
+                    json.dumps(field_asked_counter),
+                    language_info,
+                    json.dumps(field_parsed_answers),
+                    'Not Started',
+                    communication_id
+                ))
+                connection.commit()
+                start_conversation = True
+            elif not communication_id:
                 # First, fetch the form_fields from the form_fields table.
                 cursor.execute("""
                     SELECT form_fields, form_context
