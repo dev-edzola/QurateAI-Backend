@@ -40,14 +40,16 @@ def extract_json(response_text):
         return {}
 
 
-def parse_for_answers(collected_answers, form_fields, llm, form_context='', field_parsed_answers=None):
+def parse_for_answers(collected_answers, form_fields, llm, form_context='', field_parsed_answers=None, communication_context=None ):
     # current_field = last field of field_parsed_answers
+    user_info = f"User Info: {communication_context}" if communication_context else ""
     current_field = 'No field answered yet'
     if field_parsed_answers:
         current_field = list(field_parsed_answers.keys())[-1] if field_parsed_answers else 'No field answered yet'
     """Parse collected answers to extract structured data and decide next field to ask"""
     final_prompt = (
-        f"form_context: {form_context}. "
+        f"[form_context: {form_context}.] "
+        f"[{user_info}]"
         f"Field parsed answers (till now): {field_parsed_answers}\n"
         f"Collected conversation (generated via STT from a phone call; may include disfluencies or transcription errors): {collected_answers}\n"
         f"Field instructions: {form_fields}\n"
@@ -160,7 +162,7 @@ def generate_summary_response(field_parsed_answers, form_fields, llm, language="
 
 def get_next_question(form_fields, collected_answers, field_parsed_answers, field_asked_counter, llm, language="en-GB", 
                       greeting_message=None, call_id=None, audio = True, form_context='', next_field_id=None, 
-                      additional_context_next_question=None):
+                      additional_context_next_question=None, communication_context=None):
     """Generate the next question based on collected answers and question attempts"""
     if next_field_id:
         # If a specific field is requested, find it in the form fields
@@ -190,6 +192,8 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
     next_field = pending_fields[0]
     # Use provided language if available; otherwise, default to "English"
     
+    user_info = f"User Info: {communication_context}" if communication_context else ""
+
     last_n_conversations = list(collected_answers.items())[-20:]
     context = "\n".join([f"System: {quest} -> User Response: {ans}" for quest, ans in last_n_conversations])
     current_attempt = field_asked_counter.get(next_field["field_id"], 0) + 1
@@ -201,7 +205,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         f'Please generate a relevant and engaging question in {language_prompt} '
         f'(e.g., en-IN for English (Indian Accent), hi-IN for Hindi). '
         f'This question should help collect the field data: {next_field["field_name"]}. '
-        f'{feedback_instruction}'
+        f'[{feedback_instruction}]'
         f'Background: {next_field["additional_info"]}. '
         f'Use simple, conversational phrasing—avoid formal or dictionary-style language. '
         f'If the target language is a local Indian language (like hi-IN, mr-IN, ta-IN), '
@@ -214,6 +218,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         f"Today's date: {date.today()}. Note: today's date is included for additional context."
         'Feel free to ask follow-up questions or seek clarification if previous responses were unclear. '
         'Tone: Show compassion and warmth in your question.'
+        f'{user_info}'
     ).strip()
     # print(f"\n[Debug] Question prompt: {question_prompt}")
  
@@ -235,7 +240,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
             # if audio:
             #     beep_message = "I'll ask you a few quick questions. After each one, you can share your answer. Once you’ve finished speaking, you’ll hear a sound—that means your response has been recorded. Let’s start with this:"
 
-            natural_question = f"{greeting_message}. {beep_message} {natural_question}"
+            natural_question = f"{greeting_message}. {natural_question}"
             natural_question = natural_question.strip()
 
         return next_field["field_id"], natural_question
