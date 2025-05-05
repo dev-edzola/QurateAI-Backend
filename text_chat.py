@@ -16,7 +16,7 @@ def collect():
     last_answer = data.get("answer")
     last_field_id = data.get("field_id")
     last_question = data.get("question")
-    reset = data.get("reset", False)
+    reset = (str(data.get("reset", False)).lower() == 'true')
     if form_fields_id is None:
         return jsonify({"error": "Missing form_fields id"}), 400
     
@@ -54,7 +54,7 @@ def collect():
                         language_info = %s,
                         field_parsed_answers = %s,
                         communication_status = %s
-                    WHERE id = %s
+                    WHERE communication_id = %s
                 """
                 cursor.execute(update_sql, (
                     form_fields_id,
