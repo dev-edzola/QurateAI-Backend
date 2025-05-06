@@ -8,7 +8,7 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 from ai_utils import llm_reasoning, parse_for_form_fields
-
+from urllib.parse import urlparse
 
 frontend_host = os.environ.get('FRONTEND_HOST')
 
@@ -165,7 +165,14 @@ def update_form(form_id):
         values.append(data["is_active"])
     if "form_context" in data:
         update_fields.append("form_context = %s")
-        values.append(json.dumps(data["form_context"]))    
+        values.append(json.dumps(data["form_context"])) 
+    if "callback_url" in data:
+        url = data.get("callback_url")
+        parsed = urlparse(url)
+        if not (parsed.scheme in ("http", "https") and parsed.netloc):
+            return jsonify({"error": "Invalid callback_url format"}), 400
+        update_fields.append("callback_url = %s")
+        values.append(url)           
 
     if not update_fields:
         return jsonify({"error": "No valid fields provided for update"}), 400

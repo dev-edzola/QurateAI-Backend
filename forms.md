@@ -168,6 +168,7 @@
   "form_context": { ... },              // optional
   "form_fields": [ ... ],               // optional: full new fields array
   "is_active": 0                        // optional: 1 = active, 0 = inactive
+  "callback_url": "<callback_url>"
 }
 ```
 
