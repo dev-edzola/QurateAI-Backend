@@ -25,7 +25,7 @@ https://<YOUR_API_HOST>/api/text-chat
 
 ### 1. `POST /collect`
 
-Continues or starts a conversational flow by managing a communication session, parsing answers, and returning the next question.
+Continues or starts a conversational flow by managing a communication session, parsing answers, returning the next question, and (upon completion) optionally sending parsed results to a callback.
 
 #### Request
 
@@ -85,13 +85,24 @@ curl -X POST https://api.example.com/api/text-chat/collect \
 
 * **Body**:
 
-  | Field                  | Type           | Description                                                            |                      |
-  | ---------------------- | -------------- | ---------------------------------------------------------------------- | -------------------- |
-  | `form_fields_id`       | integer        | Echoes the form definition ID.                                         |                      |
-  | `communication_id`     | integer        | Session identifier (create or existing).                               |                      |
-  | `message`              | string         | The next question or final summary message.                            |                      |
-  | `field_id`             | string or null | ID of the field for the `message`; `null` if conversation is complete. |                      |
-  | `field_parsed_answers` | object         | All parsed answers collected so far (keyed by field IDs).              | #### Error Responses |
+  | Field                  | Type           | Description                                                            |
+  | ---------------------- | -------------- | ---------------------------------------------------------------------- |
+  | `form_fields_id`       | integer        | Echoes the form definition ID.                                         |
+  | `communication_id`     | integer        | Session identifier (create or existing).                               |
+  | `message`              | string         | The next question or final summary message.                            |
+  | `field_id`             | string or null | ID of the field for the `message`; `null` if conversation is complete. |
+  | `field_parsed_answers` | object         | All parsed answers collected so far (keyed by field IDs).              |
+
+* **Behavior on Completion**:
+
+  If `field_id` is `null` **and** a `callback_url` was configured for the form, the API will POST to `callback_url` with the JSON payload:
+
+  ```json
+  {
+    "field_parsed_answers": { /* parsed answers by field */ },
+    "source_id": "<source_id value>"
+  }
+  ```
 
 * **`400 Bad Request`**
 
@@ -158,7 +169,7 @@ curl -X PATCH https://api.example.com/api/text-chat/communication/metadata \
 * **Status Code**: `200 OK`
 * **Body**:
 
-  * Returns the frontend chat URL (with newly created or updated `communication_id`).
+Returns the frontend chat URL (with newly created or updated `communication_id`).
 
 ```json
 {
@@ -190,5 +201,3 @@ curl -X PATCH https://api.example.com/api/text-chat/communication/metadata \
 | 400         | `BAD_REQUEST`  | `Invalid communication_id`     | The provided `communication_id` does not exist.              |
 | 401         | `UNAUTHORIZED` | `Missing Authorization Header` | No JWT token provided for secured endpoint.                  |
 | 500         | `SERVER_ERROR` | `<error details>`              | Generic server error; see logs for details.                  |
-
-

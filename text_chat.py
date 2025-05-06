@@ -6,7 +6,7 @@ from ai_utils import llm, llm_reasoning, parse_for_answers, get_next_question
 from collections import OrderedDict
 import os
 from flask_jwt_extended import jwt_required
-
+import requests
 
 text_chat_bp = Blueprint('text_chat_bp', __name__)
 
@@ -198,6 +198,17 @@ def collect():
                     "communication_id": communication_id
                 }
                 communication_status = 'Completed'
+                # Send callback if configured
+                if callback_url:
+                    try:
+                        payload = {
+                            'field_parsed_answers': field_parsed_answers,
+                            'source_id': source_id
+                        }
+                        requests.post(callback_url, json=payload, timeout=5)
+                    except Exception as exc:
+                        # Log but do not interrupt response
+                        text_chat_bp.logger.error(f"Callback to {callback_url} failed: {exc}")
             else:
                 response_data = {
                     "form_fields_id": form_fields_id,
