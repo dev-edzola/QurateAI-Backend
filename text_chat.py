@@ -29,7 +29,7 @@ def collect():
             # If no communication_id, create a new communication row.
             if reset and communication_id:
                 cursor.execute("""
-                    SELECT form_fields, form_context
+                    SELECT form_fields, form_context, callback_url
                     FROM form_fields
                     WHERE id = %s AND is_active = 1
                 """, (form_fields_id,))
@@ -40,14 +40,14 @@ def collect():
                 form_fields  = json.loads(result["form_fields"])
                 form_context = result["form_context"] if result["form_context"] else ''
                 # Retrieve the existing communication record.
-                sql = "SELECT communication_id, communication_context, callback_url, source_id FROM communications WHERE communication_id = %s"
+                sql = "SELECT communication_id, communication_context, source_id FROM communications WHERE communication_id = %s"
                 cursor.execute(sql, (communication_id,))
                 comm = cursor.fetchone()
                 if not comm:
                     return jsonify({"error": "Invalid communication_id"}), 400
 
                 communication_context = comm["communication_context"] if comm["communication_context"] else ''
-                callback_url = comm["callback_url"] if comm["callback_url"] else None
+                callback_url = result["callback_url"] if result["callback_url"] else None
                 source_id = comm["source_id"] if comm["source_id"] else None
 
                 
@@ -122,22 +122,22 @@ def collect():
                 start_conversation = True
             else:
                 # Retrieve the existing communication record.
-                sql = "SELECT * FROM communications WHERE communication_id = %s"
+                sql = "SELECT communication_id, communication_type, form_fields_id, collected_answers, field_asked_counter, language_info, field_parsed_answers, created_at, updated_at, communication_status, communication_context, source_id FROM communications WHERE communication_id = %s"
                 cursor.execute(sql, (communication_id,))
                 comm = cursor.fetchone()
                 if not comm:
                     return jsonify({"error": "Invalid communication_id"}), 400
                 communication_context = comm["communication_context"] if comm["communication_context"] else ''
-                callback_url = comm["callback_url"] if comm["callback_url"] else None
+                
                 source_id = comm["source_id"] if comm["source_id"] else None
                 # Retrieve the form_fields from the form_fields table using the stored form_fields_id.
                 cursor.execute("""
-                    SELECT form_fields, form_context
+                    SELECT form_fields, form_context, callback_url
                     FROM form_fields
                     WHERE id = %s AND is_active = 1
                 """, (form_fields_id,))
                 result = cursor.fetchone()
-
+                callback_url = result["callback_url"] if result["callback_url"] else None
                 if not result:
                     return jsonify({"error": "Invalid form_fields id"}), 400
                 form_fields  = json.loads(result["form_fields"])
@@ -239,7 +239,6 @@ def patch_communication_metadata():
     form_fields_id = data.get("form_fields_id")
     communication_id = data.get("communication_id")
     communication_context = data.get("communication_context")
-    callback_url = data.get("callback_url")
     source_id = data.get("source_id")
     communication_type = data.get("communication_type") # either text_chat or phone_call
     # Validate required input
@@ -247,8 +246,8 @@ def patch_communication_metadata():
         return jsonify({"error": "Missing required field: form_fields_id"}), 400
     if not communication_type or communication_type not in ["text_chat", "phone_call"]:
         return jsonify({"error": "Invalid communication_type. Must be either 'text_chat' or 'phone_call'."}), 400
-    if not any([communication_context, callback_url, source_id]):
-        return jsonify({"error": "At least one of communication_context, callback_url, or source_id must be provided."}), 400
+    if not any([communication_context, source_id]):
+        return jsonify({"error": "At least one of communication_context or source_id must be provided."}), 400
 
     connection = get_db_connection()
     try:
@@ -265,9 +264,6 @@ def patch_communication_metadata():
                 if communication_context is not None:
                     update_fields.append("communication_context = %s")
                     values.append(communication_context)
-                if callback_url is not None:
-                    update_fields.append("callback_url = %s")
-                    values.append(callback_url)
                 if source_id is not None:
                     update_fields.append("source_id = %s")
                     values.append(source_id)
@@ -302,8 +298,8 @@ def patch_communication_metadata():
                 insert_sql = """
                     INSERT INTO communications 
                     (communication_type, form_fields_id, collected_answers, field_asked_counter, language_info, field_parsed_answers, communication_status,
-                     communication_context, callback_url, source_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     communication_context, source_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(insert_sql, (
                     communication_type,
@@ -314,7 +310,6 @@ def patch_communication_metadata():
                     json.dumps(field_parsed_answers),
                     'Not Started',
                     communication_context,
-                    callback_url,
                     source_id
                 ))
                 connection.commit()

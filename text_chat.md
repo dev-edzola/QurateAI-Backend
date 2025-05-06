@@ -123,7 +123,6 @@ Creates or updates metadata for an existing communication session.
   | `communication_type`    | string  | Yes      | Communication mode: `text_chat` or `phone_call`.                              |
   | `communication_id`      | integer | No       | Existing session ID (omit to create a new session).                           |
   | `communication_context` | string  | No       | Arbitrary context to prepend to future AI prompts.                            |
-  | `callback_url`          | string  | No       | URL to invoke when session state changes (e.g., to notify external services). |
   | `source_id`             | string  | No       | External identifier for linking with other systems.                           |
 
 ##### Example Request (Create)
