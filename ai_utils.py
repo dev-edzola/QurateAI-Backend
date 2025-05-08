@@ -279,7 +279,7 @@ def parse_for_form_fields(user_query, llm, form_context=''):
                     "additional_info": "This question is asked so that further communication can happen in that language",
                     "validation": "Input must be the name of an Indian language (including English); anything else is invalid",
                     "additional_parsing_comments": "Map the user's input (e.g. English, Hindi, Marathi) to its BCP 47 tag (en-IN, hi-IN, mr-IN). Reject non-Indian languages (e.g. Spanish).",
-                    "condition_for_asking_this_field": null
+                    "condition_for_asking_this_field": "First field to ask"
                 }},
                 {{
                     "field_id": "<unique_field_id>",
@@ -359,7 +359,7 @@ def get_default_form_fields():
             "additional_info": "This question is asked so that further communication can happen in that language",
             "validation": "Input must be the name of an Indian language (including English); anything else is invalid",
             "additional_parsing_comments": "Map the user's input (e.g. English, Hindi, Marathi) to its BCP 47 tag (en-IN, hi-IN, mr-IN). Reject non-Indian languages (e.g. Spanish).",
-            "condition_for_asking_this_field": None
+            "condition_for_asking_this_field": "First field to ask"
         },
         {
             "field_id": "name",
