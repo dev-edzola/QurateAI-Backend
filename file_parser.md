@@ -88,10 +88,10 @@ curl -X POST \
 
 | HTTP Status | Error Code | Description                                     |
 |-------------|------------|-------------------------------------------------|
-|`400 Bad Request`|`Missing resume\_file`       | No`resume\_file`provided in the request.     |
-|`400 Bad Request`|`Missing job\_description`   | No`job\_description`provided.                |
+|`400 Bad Request`|`Missing resume file`       | No`resume\_file`provided in the request.     |
+|`400 Bad Request`|`Missing job description`   | No`job\_description`provided.                |
 |`400 Bad Request`|`Unsupported file format`   | File format not`.pdf`, `.docx`, or `.txt`.  | 
-| `500 Internal Server Error`|`Failed to parse resume\` | Unexpected server error during parsing.       |
+| `500 Internal Server Error`|`Failed to parse resume` | Unexpected server error during parsing.       |
 
 #### Example (Missing File)
 
