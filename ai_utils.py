@@ -55,16 +55,16 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         f"Collected conversation (generated via STT from a phone call; may include disfluencies or transcription errors): {collected_answers}\n"
         f"Field instructions: {form_fields}\n"
         f"Current field: {current_field}\n"
-        f"Today's date: {date.today()}. Note: today's date is included for additional context.\n\n"
+        f"Today's date: {date.today()} (YYYY-mm-dd). Please use this date for any “current” or “relative” date reasoning.\n\n"
         "Field_id should always be valid or null, and taken from Field instructions" 
         "1. Extract each field's value (translated to English, typos corrected) into a JSON object `parsed_fields` "
         "where each key is the field_id and each value is the user's answer or null if unanswered.\n"
-        "2. Determine `next_field_id` as follows:\n"
-        "   - If 'User don't want to talk right now (not good time) or isn't available, next_field_id` to null.' "
-        "   - If `current_field` is incomplete or more data can be deduced from its answer, set `next_field_id` to its field_id.\n"
-        "   - Otherwise, from `form_fields`, find the next field whose `condition_for_asking_this_field` is satisfied by `parsed_fields`.\n"
-        "   - If a field's `condition_for_asking_this_field` is empty, assume the next field in the order of `form_fields` after the last answered field.\n"
-        "   - If no such field exists, set `next_field_id` to null.\n"
+        "Determine next_field_id as follows:"
+        " - Rescheduling: If the user isn't comfortable talking right now, or someone else picked up the call, then—only if next_field_id is currently null and this field hasn't yet been answered—ask “When can we reschedule?” (and set next_field_id to this field's field_id); otherwise leave next_field_id as null and do not ask."
+        " - Incomplete current field: If current_field is incomplete or more data can be deduced from its answer, set next_field_id to its field_id."
+        " - Next conditional field: Otherwise, from form_fields, find the next field whose condition_for_asking_this_field is satisfied by the entries in parsed_fields."
+        " - Unconditional ordering: If a field's condition_for_asking_this_field is empty, assume the next field is simply the one immediately after the last answered field in the form_fields (Field instructions) list."
+        " - No remaining fields: If no such field exists, set next_field_id to null."
         "3. Create `additional_context`: a brief instruction to the AI on how to phrase or frame the next question for `next_field_id`. "
         "If `next_field_id` is null, set `additional_context` to null.\n\n"
         "Return only a JSON object with keys: `parsed_fields`, `next_field_id`, and `additional_context`, and no other text.\n\n"
@@ -75,7 +75,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         "  \"additional_context\": \"Ask the user for their email address in clear, simple language.\"\n"
         "}"
     ).strip()
-
+    print(final_prompt)
     messages = [
         SystemMessage(content="You are an assistant that extracts structured information from text and plans the next question."),
         HumanMessage(content=final_prompt)
@@ -167,17 +167,17 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
                       greeting_message=None, call_id=None, audio = True, form_context='', next_field_id=None, 
                       additional_context_next_question=None, communication_context=None):
     """Generate the next question based on collected answers and question attempts"""
+    print("------->",next_field_id)
     pending_fields = []
     if not collected_answers:
-        pending_fields = form_fields[0]
+        pending_fields.append(form_fields[0])
     elif next_field_id:
         # If a specific field is requested, find it in the form fields
         pending_fields = [
             field for field in form_fields 
             if field["field_id"] == next_field_id
         ]
-        if not pending_fields:
-            print('--------> Not detected')    
+        if not pending_fields:  
             pending_fields = [
                 field for field in form_fields 
                 if field_asked_counter.get(field["field_id"], 0) < 3 and 
@@ -221,7 +221,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
         f'If this is not the first attempt, try a different approach. '
         f'Here is our recent conversation context: {context or "No previous context"}. '
         f'Remember that we have already collected some answers: {field_parsed_answers}. '
-        f"Today's date: {date.today()}. Note: today's date is included for additional context."
+        f"Today's date: {date.today()} (YYYY-mm-dd). Please use this date for any “current” or “relative” date reasoning."
         'Feel free to ask follow-up questions or seek clarification if previous responses were unclear. '
         'Tone: Show compassion and warmth in your question.'
         'Question Length: Keep it short and simple (easier to read), ideally one sentence. '
