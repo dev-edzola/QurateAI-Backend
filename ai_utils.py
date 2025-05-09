@@ -60,7 +60,6 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         "1. Extract each field's value (translated to English, typos corrected) into a JSON object `parsed_fields` "
         "where each key is the field_id and each value is the user's answer or null if unanswered.\n"
         "Determine next_field_id as follows:"
-        " - Rescheduling: If the user isn't comfortable talking right now, or someone else picked up the call, then—only if next_field_id is currently null and this field hasn't yet been answered—ask “When can we reschedule?” (and set next_field_id to this field's field_id); otherwise leave next_field_id as null and do not ask."
         " - Incomplete current field: If current_field is incomplete or more data can be deduced from its answer, set next_field_id to its field_id."
         " - Next conditional field: Otherwise, from form_fields, find the next field whose condition_for_asking_this_field is satisfied by the entries in parsed_fields."
         " - Unconditional ordering: If a field's condition_for_asking_this_field is empty, assume the next field is simply the one immediately after the last answered field in the form_fields (Field instructions) list."
@@ -75,7 +74,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         "  \"additional_context\": \"Ask the user for their email address in clear, simple language.\"\n"
         "}"
     ).strip()
-    print(final_prompt)
+    # print(final_prompt)
     messages = [
         SystemMessage(content="You are an assistant that extracts structured information from text and plans the next question."),
         HumanMessage(content=final_prompt)
@@ -84,7 +83,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         json_llm = llm
         final_output = json_llm.invoke(messages).content.strip()
         result = extract_json(final_output)
-        print(f"\n[Debug] Parsed result: {json.dumps(result, indent=2)}")
+        # print(f"\n[Debug] Parsed result: {json.dumps(result, indent=2)}")
         return result.get("parsed_fields", {}), result.get("next_field_id"), result.get("additional_context")
     except Exception as e:
         logger.error(f"Error parsing answers: {e}")
@@ -167,7 +166,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
                       greeting_message=None, call_id=None, audio = True, form_context='', next_field_id=None, 
                       additional_context_next_question=None, communication_context=None):
     """Generate the next question based on collected answers and question attempts"""
-    print("------->",next_field_id)
+    # print("------->",next_field_id)
     pending_fields = []
     if not collected_answers:
         pending_fields.append(form_fields[0])
