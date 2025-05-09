@@ -59,6 +59,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         "1. Extract each field's value (translated to English, typos corrected) into a JSON object `parsed_fields` "
         "where each key is the field_id and each value is the user's answer or null if unanswered.\n"
         "2. Determine `next_field_id` as follows:\n"
+        "   - If 'User don't want to talk right now (not good time) or isn't available, next_field_id` to null.' "
         "   - If `current_field` is incomplete or more data can be deduced from its answer, set `next_field_id` to its field_id.\n"
         "   - Otherwise, from `form_fields`, find the next field whose `condition_for_asking_this_field` is satisfied by `parsed_fields`.\n"
         "   - If a field's `condition_for_asking_this_field` is empty, assume the next field in the order of `form_fields` after the last answered field.\n"
@@ -171,12 +172,12 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
             field for field in form_fields 
             if field["field_id"] == next_field_id
         ]
-    if not next_field_id or not pending_fields:    
-        pending_fields = [
-            field for field in form_fields 
-            if field_asked_counter.get(field["field_id"], 0) < 3 and 
-            (field_parsed_answers.get(field["field_id"]) is None or field_parsed_answers.get(field["field_id"]) == "")
-        ]
+    # if next_field_id and not pending_fields:    
+    #     pending_fields = [
+    #         field for field in form_fields 
+    #         if field_asked_counter.get(field["field_id"], 0) < 3 and 
+    #         (field_parsed_answers.get(field["field_id"]) is None or field_parsed_answers.get(field["field_id"]) == "")
+    #     ]
     
 
     language_prompt = language if language != None and not language.lower().startswith('en') else "English"
