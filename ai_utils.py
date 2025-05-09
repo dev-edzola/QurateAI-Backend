@@ -56,6 +56,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         f"Field instructions: {form_fields}\n"
         f"Current field: {current_field}\n"
         f"Today's date: {date.today()}. Note: today's date is included for additional context.\n\n"
+        "field_id should always be valid or null, and taken from Field instructions" 
         "1. Extract each field's value (translated to English, typos corrected) into a JSON object `parsed_fields` "
         "where each key is the field_id and each value is the user's answer or null if unanswered.\n"
         "2. Determine `next_field_id` as follows:\n"
