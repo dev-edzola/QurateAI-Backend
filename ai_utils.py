@@ -167,6 +167,7 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
                       greeting_message=None, call_id=None, audio = True, form_context='', next_field_id=None, 
                       additional_context_next_question=None, communication_context=None):
     """Generate the next question based on collected answers and question attempts"""
+    pending_fields = []
     if next_field_id:
         # If a specific field is requested, find it in the form fields
         pending_fields = [
