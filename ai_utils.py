@@ -56,7 +56,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         f"Field instructions: {form_fields}\n"
         f"Current field: {current_field}\n"
         f"Today's date: {date.today()}. Note: today's date is included for additional context.\n\n"
-        "field_id should always be valid or null, and taken from Field instructions" 
+        "Field_id should always be valid or null, and taken from Field instructions" 
         "1. Extract each field's value (translated to English, typos corrected) into a JSON object `parsed_fields` "
         "where each key is the field_id and each value is the user's answer or null if unanswered.\n"
         "2. Determine `next_field_id` as follows:\n"
@@ -168,19 +168,21 @@ def get_next_question(form_fields, collected_answers, field_parsed_answers, fiel
                       additional_context_next_question=None, communication_context=None):
     """Generate the next question based on collected answers and question attempts"""
     pending_fields = []
-    if next_field_id:
+    if not collected_answers:
+        pending_fields = form_fields[0]
+    elif next_field_id:
         # If a specific field is requested, find it in the form fields
         pending_fields = [
             field for field in form_fields 
             if field["field_id"] == next_field_id
         ]
-    # if next_field_id and not pending_fields:    
-    #     pending_fields = [
-    #         field for field in form_fields 
-    #         if field_asked_counter.get(field["field_id"], 0) < 3 and 
-    #         (field_parsed_answers.get(field["field_id"]) is None or field_parsed_answers.get(field["field_id"]) == "")
-    #     ]
-    
+        if not pending_fields:
+            print('--------> Not detected')    
+            pending_fields = [
+                field for field in form_fields 
+                if field_asked_counter.get(field["field_id"], 0) < 3 and 
+                (field_parsed_answers.get(field["field_id"]) is None or field_parsed_answers.get(field["field_id"]) == "")
+            ]
 
     language_prompt = language if language != None and not language.lower().startswith('en') else "English"
 

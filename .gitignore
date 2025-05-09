@@ -80,3 +80,4 @@ logs/
 audio_files/
 transcription_audio/
 google_credentials.json
+test.py
