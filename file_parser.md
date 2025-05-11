@@ -4,7 +4,7 @@
 ## Base URL
 
 ```
-https://<your-domain>/api
+https://<your-domain>/
 ```
 
 > Replace `<your-domain>` with your server's hostname or IP.

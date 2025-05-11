@@ -73,9 +73,10 @@ def get_resume_summary_and_ats_score(jd_text, resume_text, llm):
     ]
 
     try:
+        # print('messages: ', messages)
         response = llm.invoke(messages).content.strip()
-        response = extract_json(response)
-        return json.loads(response)
+        # print(response)
+        return extract_json(response)
     except Exception as e:
         print(f"Error: {e}")
         return {"user_info": {}, "ats_score": 0}
@@ -100,6 +101,7 @@ def parse_resume():
 
     try:
         resume_text = extract_resume_text(temp_path)
+        # print(resume_text)
         result = get_resume_summary_and_ats_score(job_description, resume_text, llm_reasoning)
         return jsonify(result), 200
     except ValueError as ve:
