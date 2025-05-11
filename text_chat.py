@@ -26,6 +26,16 @@ def collect():
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
+            if communication_id is not None:
+                cursor.execute("""
+                    SELECT communication_status
+                    FROM communications
+                    WHERE communication_id = %s
+                """, (communication_id,))
+                status_row = cursor.fetchone()
+                if status_row and status_row.get("communication_status") == "Completed":
+                    return jsonify({"error": "Already submitted"}), 409
+
             # If no communication_id, create a new communication row.
             if reset and communication_id:
                 cursor.execute("""

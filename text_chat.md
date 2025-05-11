@@ -195,9 +195,11 @@ Returns the frontend chat URL (with newly created or updated `communication_id`)
 
 ## Common Error Codes
 
-| HTTP Status | Code           | Message                        | Description                                                  |
-| ----------- | -------------- | ------------------------------ | ------------------------------------------------------------ |
-| 400         | `BAD_REQUEST`  | `Invalid form_fields id`       | The provided `form_fields_id` does not exist or is inactive. |
-| 400         | `BAD_REQUEST`  | `Invalid communication_id`     | The provided `communication_id` does not exist.              |
-| 401         | `UNAUTHORIZED` | `Missing Authorization Header` | No JWT token provided for secured endpoint.                  |
-| 500         | `SERVER_ERROR` | `<error details>`              | Generic server error; see logs for details.                  |
+| HTTP Status | Code           | Message                        | Description                                                           |
+| ----------- | -------------- | ------------------------------ | --------------------------------------------------------------------- |
+| 400         | `BAD_REQUEST`  | `Invalid form_fields id`       | The provided `form_fields_id` does not exist or is inactive.          |
+| 400         | `BAD_REQUEST`  | `Invalid communication_id`     | The provided `communication_id` does not exist.                       |
+| 401         | `UNAUTHORIZED` | `Missing Authorization Header` | No JWT token provided for a secured endpoint.                         |
+| 409         | `CONFLICT`     | `Already submitted`            | The form has already been completed for the given `communication_id`. |
+| 500         | `SERVER_ERROR` | `<error details>`              | Generic server error; see logs for details.                           |
+
