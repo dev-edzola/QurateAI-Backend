@@ -48,7 +48,8 @@ def get_resume_summary_and_ats_score(jd_text, resume_text, llm):
     1. Extract and summarize key candidate information into `user_info`:
     - Name
     - Email (if available)
-    - Phone (if available)
+    - Phone (if available; must include country code, e.g., +917896577010. If location is not provided, assume India for default country code)
+    - Location
     - Total Experience (years, inferred)
     - Relevant Experience (to JD)
     - Current/Last Role and Company
