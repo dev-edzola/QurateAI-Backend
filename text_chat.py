@@ -21,6 +21,7 @@ def collect():
     reset = (str(data.get("reset", False)).lower() == 'true')
     if form_fields_id is None:
         return jsonify({"error": "Missing form_fields id"}), 400
+    print('JSON recieved', data)
     communication_context, callback_url, source_id = '', None, None
     form_context = ''
     connection = get_db_connection()
