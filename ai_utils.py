@@ -60,7 +60,7 @@ def parse_for_answers(collected_answers, form_fields, llm, form_context='', fiel
         "1. Extract each field's value (translated to English, typos corrected) into a JSON object `parsed_fields` "
         "where each key is the field_id and each value is the user's answer or null if unanswered.\n"
         "Determine next_field_id as follows:"
-        " - Incomplete current field: If current_field is incomplete or more data can be deduced from its answer, set next_field_id to its field_id."
+        " - Incomplete current field: If current_field is incomplete or more data can be deduced from its answer, set next_field_id to its field_id. If needed ask for more information (follow-up questions), but avoid asking question more than 3 times for same field_id."
         " - Next conditional field: Otherwise, from form_fields, find the next field whose condition_for_asking_this_field is satisfied by the entries in parsed_fields."
         " - Unconditional ordering: If a field's condition_for_asking_this_field is empty, assume the next field is simply the one immediately after the last answered field in the form_fields (Field instructions) list."
         " - No remaining fields: If no such field exists, set next_field_id to null."
