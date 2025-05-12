@@ -130,7 +130,7 @@ def get_specific_form(form_id):
     try:
         with connection.cursor() as cursor:
             sql = (
-                "SELECT id, form_field_name, form_fields, is_active, created_at, updated_at, form_context FROM QURATE_AI.form_fields "
+                "SELECT id, form_field_name, form_fields, is_active, created_at, updated_at, form_context, callback_url FROM QURATE_AI.form_fields "
                 "WHERE id = %s AND user_id IS NOT NULL AND user_id = %s"
             )
             cursor.execute(sql, (form_id, current_user_id))
