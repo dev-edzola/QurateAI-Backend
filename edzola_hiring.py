@@ -57,6 +57,7 @@ def get_resume_summary_and_ats_score(jd_text, resume_text, llm):
     - Education (highest degree and university)
     - Notable achievements (if any)
 
+    Key IDs (user_info): Name, Email, Phone, Location, Total Experience, Relevant Experience, Current/Last Role and Company, Skills, Education, Notable achievements
     2. Compute an `ats_score` (0–100) evaluating the match between resume and JD. Consider:
     - Skill overlap
     - Experience relevance
